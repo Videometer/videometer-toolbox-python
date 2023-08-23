@@ -2,3 +2,4 @@
 dist/
 *videometer.egg-info/
 .vscode/
+src/videometer/DLLs

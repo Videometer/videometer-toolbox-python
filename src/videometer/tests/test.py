@@ -1,4 +1,4 @@
-import videometer as vm
+import videometer.videometer as vm
 import videometer.HelpFunctions as hf
 import os
 import numpy as np
@@ -8,9 +8,10 @@ from parameterized import parameterized_class
 
 import clr
 import System
-VMPATH = os.path.dirname(os.path.abspath(__file__))
-clr.AddReference(os.path.join(VMPATH,"..","VM","VM.Image.dll"))
-clr.AddReference(os.path.join(VMPATH,"..","VM","VM.Image.IO.dll"))
+VMPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),".."))
+VMDLLPATH = os.path.join(VMPATH, "DLLs","VM")
+clr.AddReference(os.path.join(VMDLLPATH,"VM.Image.dll"))
+clr.AddReference(os.path.join(VMDLLPATH,"VM.Image.IO.dll"))
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO
 
@@ -21,7 +22,7 @@ import VM.Image.IO as VMImIO
 
 
 
-testImagesDir = os.path.join(VMPATH,"TestImages")
+testImagesDir = os.path.join(VMPATH,"tests","TestImages")
 os.chdir(testImagesDir)
 
 
@@ -484,127 +485,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-
-
-### ------------------------------------- 
-# def createTestSuite(testCases):
-#     suite = unittest.TestSuite()
-#     for testCase in testCases:
-#         tests = unittest.TestLoader().loadTestsFromTestCase(testCase)
-#         suite.addTests(tests)
-#     return suite
-
-
-# if __name__ == "__main__":
-#     # This is not the typical way of using unittest but we want to run the same tests on a bunch of photos so here we are 
-
-#     runTestCasesOnImages = True
-#     runTestCasesSingleRun = True
-
-#     # Get all class names
-#     testCases = [classes[1] for classes in inspect.getmembers(importlib.import_module("test"), inspect.isclass)]
-#     testCasesOnImages = [testCase for testCase in testCases if "TestOnImages" in testCase.__name__]
-#     testCasesSingleRun = [testCase for testCase in testCases if not testCase in testCasesOnImages]
-
-    
-#     allFailedTests = dict()
-
-#     if runTestCasesOnImages:
-#         ###################### Run test for images ##################### 
-#         for path in pathsToImages:        
-
-#             filename = os.path.basename(path)
-            
-#             # Run all the tests
-#             runner = unittest.TextTestRunner(verbosity=0).run(createTestSuite(testCasesOnImages))
-
-#             allStrings = []
-#             for f in runner.failures:
-#                 s = "==========================="+filename+"=============================\n"
-#                 s += "FAIL : " + str(f[0]) + "\n"
-#                 s += "----------------------------------------------------------------------\n"
-#                 s += str(f[1]) 
-#                 s += "\n"
-#                 allStrings.append(s)
-
-#             for f in runner.errors:
-#                 s = "==========================="+filename+"=============================\n"
-#                 s += "ERROR : " + str(f[0]) + "\n"
-#                 s += "----------------------------------------------------------------------\n"
-#                 s += str(f[1]) 
-#                 s += "\n"
-#                 allStrings.append(s)
-
-#             allFailedTests[filename] = allStrings
-
-
-#         # Print all results 
-#         for v in allFailedTests.values():
-#             print(*v, sep="\n")
-
-#     # Cleanup
-
-    
-
-
-#     ##################### Run all single cases ##################### 
-#     if runTestCasesSingleRun:
-#         runner = unittest.TextTestRunner(verbosity=0).run(createTestSuite(testCasesSingleRun))
-        
-#         allStrings = []
-#         for f in runner.failures:
-#             s = "=========================== Single Run Case =============================\n"
-#             s += "FAIL : " + str(f[0]) + "\n"
-#             s += "----------------------------------------------------------------------\n"
-#             s += str(f[1]) 
-#             s += "\n"
-#             allStrings.append(s)
-
-#         for f in runner.errors:
-#             s = "=========================== Single Run Case =============================\n"
-#             s += "ERROR : " + str(f[0]) + "\n"
-#             s += "----------------------------------------------------------------------\n"
-#             s += str(f[1]) 
-#             s += "\n"
-#             allStrings.append(s)
-
-#         allFailedTests["SingleRunCases"] = allStrings
-
-
-
-
-#     ##################### Print summary ##################### 
-
-#     # print("Ran " + str(runner.testsRun) + " tests on " + str(len(pathsToImages)) + " images")
-#     print("\n\n................ Scroll Up to see detail ................\n\nSummary: ")
-#     for k,v in allFailedTests.items():
-        
-#         nFailures = 0
-#         nErrors = 0
-#         for s in v:
-#             if "FAIL" in s:
-#                 nFailures += 1
-#             elif "ERROR" in s:
-#                 nErrors += 1
-
-#         if nFailures == 0 and nErrors == 0:
-#             outputstring = "Ok"
-#         else:
-#             outputstring = "FAILED (failures=" + str(nFailures) + ", errors="+str(nErrors)+")"
-#         print(k, ":" , outputstring)
-    
-    
-
-
-
-
-
-
-
-
-
-
-
+	
 
 
 

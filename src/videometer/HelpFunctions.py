@@ -5,17 +5,21 @@ import numbers
 
 
 """Add Dlls to the clr"""
-VMPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),".."))
+VMPATH = os.path.dirname(os.path.abspath(__file__))
 listOfDlls = ["VM.Image.dll",
               "VM.Image.IO.dll",
-              "VM.Illumination",
+              "VM.Illumination.dll",
               "VM.Image.NaturalColorConversion.dll",
               "VM.FreehandLayerIO.dll",
               "VM.Image.Compression.dll"
               ]
 
 for dllName in listOfDlls:
-    clr.AddReference(os.path.join(VMPATH,"VM",dllName))
+    path2dll = os.path.join(VMPATH,"DLLs","VM",dllName)
+    if not os.path.isfile(path2dll):
+        raise FileNotFoundError("File not found : " + path2dll)
+    clr.AddReference(path2dll)
+
 
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO

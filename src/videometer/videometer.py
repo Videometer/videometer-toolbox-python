@@ -1,12 +1,21 @@
-# Add path to DLLs in runtime
+# Add path to ipp DLLs in runtime
 import os
-VMPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),".."))
-os.environ["PATH"] += ";"+ os.path.join(VMPATH,"IPP2019Update1","intel64")
+VMPATH = os.path.dirname(os.path.abspath(__file__))
+path2ipp = os.path.join(VMPATH,"DLLs","IPP2019Update1","intel64")
+
+# If DLLs 
+if not os.path.isdir(path2ipp):
+    print("Attention. \nRequired DLLs were not found. Let me get them for you")
+    from videometer.setupHelper import setupDlls
+    setupDlls()
+
+
+os.environ["PATH"] += ";"+ path2ipp
 
 import matplotlib.pyplot as plt
 import numpy as np
 import clr
-import .HelpFunctions as hf # local import
+import videometer.HelpFunctions as hf 
 
 
 listOfDlls = ["VM.Image.IO.dll",
@@ -16,7 +25,7 @@ listOfDlls = ["VM.Image.IO.dll",
               ]
 
 for dllName in listOfDlls:
-    path2dll = os.path.join(VMPATH,"VM",dllName)
+    path2dll = os.path.join(VMPATH,"DLLs","VM",dllName)
     if not os.path.isfile(path2dll):
         raise FileNotFoundError("File not found : " + path2dll)
     clr.AddReference(path2dll)
