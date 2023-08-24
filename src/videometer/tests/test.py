@@ -1,5 +1,5 @@
-import videometer.videometer as vm
-import videometer.HelpFunctions as hf
+import videometer.hips as hips
+import videometer.vmUtils as utils
 import os
 import numpy as np
 import unittest
@@ -50,7 +50,7 @@ class Test02OnImagesRead(unittest.TestCase):
         #     print("bingo", self.imagePath)
         #     time.sleep(1)
 
-        self.ImageClass = vm.read(self.imagePath) 
+        self.ImageClass = hips.read(self.imagePath) 
 
     def test_ImagePixelValues(self):
         self.assertIs(type(self.ImageClass.PixelValues), np.ndarray)
@@ -170,7 +170,7 @@ class Test02OnImagesRead(unittest.TestCase):
         self.assertEqual(self.ImageClass.History.replace("\r\n",""), "History from the test image")
 
         compressionOfTestImage = self.ImageClass.ImageFileName.split("_")[-1].replace(".hips","")
-        compressionLUT = hf.get_CompressionAndQuantificationPresetLUT()
+        compressionLUT = utils.get_CompressionAndQuantificationPresetLUT()
         self.assertTrue(compressionOfTestImage in compressionLUT)
         compParam = compressionLUT[compressionOfTestImage]
         if compressionOfTestImage == "Uncompressed": ## Uncompressed is not initialized correctly in the Compression Preset LUT
@@ -188,10 +188,10 @@ class Test02OnImagesRead(unittest.TestCase):
 class Test01OnImagesWrite(unittest.TestCase):
     @classmethod
     def setUpClass(self):
-        self.ImageClass = vm.read(self.imagePath) 
+        self.ImageClass = hips.read(self.imagePath) 
 
     def test_WriteImageClass(self):
-        path = vm.write(self.ImageClass, os.path.join("TestImagesWriting",  "WritingTest_" + self.ImageClass.ImageFileName))
+        path = hips.write(self.ImageClass, os.path.join("TestImagesWriting",  "WritingTest_" + self.ImageClass.ImageFileName))
         self.assertIsNotNone(path)
         self.assertTrue(os.path.isfile(path))
         
@@ -204,12 +204,12 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
     def setUpClass(self):
         # if "WritingTest" in self.imagePath:
         #     time.sleep(3)
-        self.ImageClass = vm.read(self.imagePath)
-        self.ImageClassMasked = vm.read(self.imagePath)
-        self.ImageClassReduced = vm.read(self.imagePath)
+        self.ImageClass = hips.read(self.imagePath)
+        self.ImageClassMasked = hips.read(self.imagePath)
+        self.ImageClassReduced = hips.read(self.imagePath)
 
     def test_show(self):
-        plt_outputs = vm.show(self.ImageClass, ifOnlyGetListOfPLTObjects=True)
+        plt_outputs = hips.show(self.ImageClass, ifOnlyGetListOfPLTObjects=True)
 
         images = np.array([p.get_array() for p in plt_outputs])     
         titles = np.array([p.axes.get_title() for p in plt_outputs])    
@@ -228,7 +228,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
         bandIndexesToUse=[0]
         bands = len(bandIndexesToUse)
 
-        plt_outputs = vm.show(self.ImageClass, bandIndexesToUse=bandIndexesToUse, ifOnlyGetListOfPLTObjects=True)
+        plt_outputs = hips.show(self.ImageClass, bandIndexesToUse=bandIndexesToUse, ifOnlyGetListOfPLTObjects=True)
         images = np.array([p.get_array() for p in plt_outputs])     
         titles = np.array([p.axes.get_title() for p in plt_outputs])   
     
@@ -246,7 +246,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
 
     def test_showMasked(self):
         self.ImageClassMasked.ForegroundPixels = np.array([[0,0,0],[0,0,0]],dtype=np.uint8)
-        plt_outputs = vm.show(self.ImageClassMasked, ifUseMask=True, ifOnlyGetListOfPLTObjects=True)
+        plt_outputs = hips.show(self.ImageClassMasked, ifUseMask=True, ifOnlyGetListOfPLTObjects=True)
         images = np.array([p.get_array() for p in plt_outputs])     
         titles = np.array([p.axes.get_title() for p in plt_outputs])    
 
@@ -258,7 +258,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
     def test_ReduceBands(self):
         bandsIndexesToUse = [0,18]
         bands = len(bandsIndexesToUse)
-        self.ImageClassReduced = vm.ReduceBands(self.ImageClassReduced, bandsIndexesToUse)
+        self.ImageClassReduced = hips.ReduceBands(self.ImageClassReduced, bandsIndexesToUse)
         
         self.assertTrue(np.all(self.ImageClassReduced.PixelValues.shape == (self.ImageClassReduced.Height,self.ImageClassReduced.Width,bands)))
         self.assertEqual(self.ImageClassReduced.Bands, bands)
@@ -294,11 +294,11 @@ class TestWriting(unittest.TestCase):
         arr = np.zeros((2,3,19), dtype=np.float32)
         arr[:,:,0] = np.array([[0,1,2],[3,4,5]], dtype=np.float32)
 
-        path = vm.write(arr, os.path.join("TestImagesWriting",  "WritingTest_Arr.hips"))
+        path = hips.write(arr, os.path.join("TestImagesWriting",  "WritingTest_Arr.hips"))
         self.assertIsNotNone(path)
         self.assertTrue(os.path.isfile(path))
 
-        a = vm.read(path)
+        a = hips.read(path)
         self.assertTrue(np.all(arr == a.PixelValues))
         ## The rest should be none and zeros .. don't really need to test for that
 
@@ -307,7 +307,7 @@ class TestWriting(unittest.TestCase):
 class TestVMfunctions(unittest.TestCase):
     @classmethod
     def setUpClass(self): 
-        self.ImageClass = vm.read("calibratedImage.hips")
+        self.ImageClass = hips.read("calibratedImage.hips")
 
     def test_To_sRGB(self):
         img = self.ImageClass.To_sRGB(spectraName="D65")
@@ -329,7 +329,7 @@ class TestVMfunctions(unittest.TestCase):
         
 
     def test_showRGB(self):
-        axImg = vm.showRGB(self.ImageClass)
+        axImg = hips.showRGB(self.ImageClass)
         self.assertTrue(np.all(self.ImageClass.RGBPixels == axImg.get_array()))
 
 
@@ -343,7 +343,7 @@ class TestHelperFunctions(unittest.TestCase):
             sysArr[i] = float(i)
         npArr = np.arange(N, dtype=np.float32)
         
-        npArr2sys = hf.asNetArray(npArr)
+        npArr2sys = utils.asNetArray(npArr)
 
         for i in range(N):
             self.assertEqual(sysArr[i], npArr2sys[i])
@@ -356,17 +356,17 @@ class TestHelperFunctions(unittest.TestCase):
             sysArr[i] = float(i)
         npArr = np.arange(N, dtype=np.float32)
         
-        sysArr2np = hf.asNumpyArray(sysArr)
+        sysArr2np = utils.asNumpyArray(sysArr)
 
         self.assertTrue(np.all(npArr == sysArr2np))
 
 
     def test_imageLayer2npArray(self):
         npArr = np.array([[1,0,1],[0,1,0]],dtype=np.float32) 
-        img = VMIm.VMImage(hf.asNetArray(npArr))
+        img = VMIm.VMImage(utils.asNetArray(npArr))
         imageLayer = VMIm.ImageLayer(img)
 
-        img2npArr = hf.imageLayer2npArray(imageLayer)
+        img2npArr = utils.imageLayer2npArray(imageLayer)
 
         img.Free()        
         self.assertTrue(np.all(npArr == img2npArr))
@@ -374,25 +374,25 @@ class TestHelperFunctions(unittest.TestCase):
 
 
     def test_get_IlluminationLUT(self):
-        lut = hf.get_IlluminationLUT()
+        lut = utils.get_IlluminationLUT()
         self.assertIs(type(lut), dict)
         self.assertEqual(len(lut), 15)
         
 
     def test_illuminationObjects2List(self):
         names = np.array(["Mixed","NA","Diffused_UV"])
-        lut = hf.get_IlluminationLUT()
+        lut = utils.get_IlluminationLUT()
         illumObj = [lut[name] for name in names]
 
-        namesObjects = hf.illuminationObjects2List(illumObj)
+        namesObjects = utils.illuminationObjects2List(illumObj)
         self.assertTrue(np.all(names == namesObjects))
 
 
     def test_illuminationList2Objects(self):
         names = np.array(["Mixed","NA","Diffused_UV"])
-        listOfObjects = hf.illuminationList2Objects(names)
+        listOfObjects = utils.illuminationList2Objects(names)
 
-        lut = hf.get_IlluminationLUT()
+        lut = utils.get_IlluminationLUT()
         illumObj = np.array([lut[name] for name in names])
 
         self.assertTrue(np.all(listOfObjects == illumObj))
@@ -401,15 +401,15 @@ class TestHelperFunctions(unittest.TestCase):
     def test_checkIfbandIndexesToUseIsValid(self):
 
         with self.assertRaises(TypeError):
-            hf.checkIfbandIndexesToUseIsValid()
-            hf.checkIfbandIndexesToUseIsValid([],"")
-            hf.checkIfbandIndexesToUseIsValid(-1,"")
-            hf.checkIfbandIndexesToUseIsValid([],-1)
-            hf.checkIfbandIndexesToUseIsValid([1,2,3,4],-1)
-            hf.checkIfbandIndexesToUseIsValid([1,2,3,4],[1,2,3,4])
-            hf.checkIfbandIndexesToUseIsValid([1,-2,3,4],10)
+            utils.checkIfbandIndexesToUseIsValid()
+            utils.checkIfbandIndexesToUseIsValid([],"")
+            utils.checkIfbandIndexesToUseIsValid(-1,"")
+            utils.checkIfbandIndexesToUseIsValid([],-1)
+            utils.checkIfbandIndexesToUseIsValid([1,2,3,4],-1)
+            utils.checkIfbandIndexesToUseIsValid([1,2,3,4],[1,2,3,4])
+            utils.checkIfbandIndexesToUseIsValid([1,-2,3,4],10)
             
-        self.assertIsNone(hf.checkIfbandIndexesToUseIsValid([1,2,3,4],10))
+        self.assertIsNone(utils.checkIfbandIndexesToUseIsValid([1,2,3,4],10))
             
 
         
@@ -429,9 +429,9 @@ class TestHelperFunctions(unittest.TestCase):
     def test_vmImage2npArray(self):
         npArr = np.array([[[1,2,3],[4,5,6]]],dtype=np.float32) 
         npArr2VMimg = np.transpose(npArr, (2,0,1))
-        img = VMIm.VMImage(hf.asNetArray(npArr2VMimg))
+        img = VMIm.VMImage(utils.asNetArray(npArr2VMimg))
 
-        npArrFromImg = hf.vmImage2npArray(img)
+        npArrFromImg = utils.vmImage2npArray(img)
 
         img.Free()
         self.assertTrue(np.all(npArr == npArrFromImg))
@@ -440,10 +440,10 @@ class TestHelperFunctions(unittest.TestCase):
         vmImgRef = VMImIO.HipsIO.LoadImage("calibratedImage.hips")
         
         # 2-D 
-        vmImg2 = hf.npArray2VMImage(np.array([[5.81, 6.10, 5.29],[6.15, 6.13, 5.22],[6.33, 5.90, 5.01]], dtype=np.float32))
+        vmImg2 = utils.npArray2VMImage(np.array([[5.81, 6.10, 5.29],[6.15, 6.13, 5.22],[6.33, 5.90, 5.01]], dtype=np.float32))
         
         # 3-D
-        vmImg3 = hf.npArray2VMImage(np.array([[5.81, 6.10, 5.29],[6.15, 6.13, 5.22],[6.33, 5.90, 5.01]], dtype=np.float32).reshape((3,3,1))) # Height x Width x Bands
+        vmImg3 = utils.npArray2VMImage(np.array([[5.81, 6.10, 5.29],[6.15, 6.13, 5.22],[6.33, 5.90, 5.01]], dtype=np.float32).reshape((3,3,1))) # Height x Width x Bands
 
         diffLimit = 0.01
         for i in range(3):
@@ -458,7 +458,7 @@ class TestHelperFunctions(unittest.TestCase):
         
 
     def test_get_SpectraNamesLUP(self):
-        lut = hf.get_SpectraNamesLUP()
+        lut = utils.get_SpectraNamesLUP()
         self.assertIs(type(lut), dict)
         self.assertEqual(len(lut), 35)
         self.assertTrue("D65" in lut)
@@ -469,7 +469,7 @@ class TestHelperFunctions(unittest.TestCase):
         pass
 
     def test_get_CompressionAndQuantificationPresetLUT(self):
-        lut = hf.get_CompressionAndQuantificationPresetLUT()
+        lut = utils.get_CompressionAndQuantificationPresetLUT()
         compressions = ["Uncompressed", "VeryHighQuality","HighQuality","HighCompression","VeryHighCompression"]
         self.assertIs(type(lut), dict)
         self.assertEqual(len(lut), len(compressions))

@@ -2,6 +2,10 @@ import numpy as np
 import os
 import clr, System
 import numbers
+import ctypes
+
+from System.Runtime.InteropServices import GCHandle, GCHandleType
+
 
 
 """Add Dlls to the clr"""
@@ -78,35 +82,6 @@ def illuminationList2Objects(illuminationList):
     return np.array(illuminationObjects)
     
 
-def asNetArray(npArray):
-    '''
-    Given a `numpy.ndarray` returns a CLR `System.Array` of type System.Single
-    
-    '''
-    if type(npArray) != np.ndarray:
-        raise TypeError("npArray input needs to a numpy array")
-    
-    # Take in any dimensions of array and iterate through it in one for loop
-    dims = npArray.shape
-    netArray = System.Array.CreateInstance(System.Single, dims)
-    index = [0 for _ in range(netArray.Rank)]
-
-    for _ in range(netArray.Length):
-        ## Set value
-        value = clr.System.Single(float(npArray[tuple(index)]))
-        netArray.SetValue(value, index)
-
-        ## Update index
-        index[-1] += 1
-        for j in range(netArray.Rank-1,-1,-1):
-            if index[j] == dims[j]:
-                index[j-1] += 1
-                index[j] = 0 
-
-    return netArray
-
-
-
 def asNumpyArray(netArray):
     '''
     Given a CLR `System.Array` returns a `numpy.ndarray`.  See _MAP_NET_NP for 
@@ -127,19 +102,8 @@ def asNumpyArray(netArray):
     for I in range(netArray.Rank):
         dims[I] = netArray.GetLength(I)
     
-    # Take in any dimensions of array and iterate through it in one for loop
-    npArray = np.empty(dims, dtype=_MAP_NET_NP[netType])
-    index = [0 for _ in range(netArray.Rank)]
-    for _ in range(netArray.Length):
-        ## Set value
-        npArray[tuple(index)] =  netArray.GetValue(index)
-
-        ## Update index
-        index[-1] += 1
-        for j in range(netArray.Rank-1,-1,-1):
-            if index[j] == dims[j]:
-                index[j-1] += 1
-                index[j] = 0 
+    # Take in any dimensions of array and iterate through it in one for loop    
+    npArray = np.ctypeslib.as_array(netArray, shape=dims).astype(_MAP_NET_NP[netType])
 
     return npArray
 
@@ -179,7 +143,8 @@ def addAllAvailableImageLayers(VMImageObject, ImageClass):
         VMImageObject = addImageLayer(VMImageObject, imgLayer, imgLayerType)
 
     # Set the FreehandLayer
-    VMImageObject = setFreehandLayers(VMImageObject, ImageClass)
+    if not (ImageClass.FreehandLayers is None): 
+        VMImageObject = setFreehandLayers(VMImageObject, ImageClass)
 
     return VMImageObject
 
@@ -205,7 +170,7 @@ def setFreehandLayers(VMImageObject, ImageClass):
 
     # IF we don't need the description we could just use the VM.Image.IO.FreehandlayerIO.SetMaskToFreehandLayerXmlString(this VMImage image, VMImage mask, int layerId) function
 
-    arrayOfContainers = System.Array.CreateInstance(VMFreehand.FreehandLayerIOContainer, len( ImageClass.FreehandLayers) )
+    arrayOfContainers = System.Array.CreateInstance(VMFreehand.FreehandLayerIOContainer, len(ImageClass.FreehandLayers) )
 
     for i, freehandLayer in enumerate(ImageClass.FreehandLayers):
         # pixels from numpy array to Byte[,]
@@ -238,26 +203,66 @@ def vmImage2npArray(vmImage):
     bands = vmImage.Bands
 
     npArray = np.empty((height, width, bands), dtype=np.float32)
-    for x in range(width):
-        for y in range(height):
-            for b in range(bands):
-                npArray[y,x,b] = vmImage.GetPixel(x,y,b)
+    for b in range(bands):
+        bandLayer = VMIm.ImagePixelAccess.GetValues(vmImage, b)
+        npArray[:,:,b] = asNumpyArray(bandLayer).reshape(height,width)
 
     vmImage.Free()
 
     return npArray
 
 
+def asNetArrayMemMove(npArray):
+    '''
+    Given a `numpy.ndarray` returns a CLR `System.Array`.  See _MAP_NP_NET for 
+    the mapping of Numpy dtypes to CLR types. 
+    
+    '''
+    _MAP_NP_NET = {
+    np.dtype('float32'): System.Single,
+    np.dtype('int32')  : System.Int32,
+    np.dtype('uint8')  : System.Byte
+    }
+    dims = npArray.shape
+    dtype = npArray.dtype
+
+    if not npArray.flags.c_contiguous:
+        npArray = npArray.copy(order='C')
+    assert npArray.flags.c_contiguous
+    try:
+        netArray = System.Array.CreateInstance(_MAP_NP_NET[dtype], dims)
+    except KeyError:
+        raise NotImplementedError("The function does not yet support dtype {}".format(dtype))
+
+    try: # Memmove 
+        destHandle = GCHandle.Alloc(netArray, GCHandleType.Pinned)
+        sourcePtr = npArray.__array_interface__['data'][0]
+        destPtr = destHandle.AddrOfPinnedObject().ToInt64()
+        ctypes.memmove(destPtr, sourcePtr, npArray.nbytes)
+    finally:
+        if destHandle.IsAllocated: destHandle.Free()
+    return netArray
+
+
+# NOTE The function uses memmory move so it might not be clear to C# objects and python
+#       who actually owns (and can access) if it is changed.
 def npArray2VMImage(npArray):
     if type(npArray) != np.ndarray or (len(npArray.shape) != 2 and len(npArray.shape) != 3):
         raise TypeError("npArray needs to be a 2-D or 3-D numpy array") 
 
+    # Change dimensions to bands x height x width
+    if len(npArray.shape) == 2:
+        npArray = np.array([npArray])
+    else:
+        npArray = npArray.transpose([2,0,1])
+
     npArray = npArray.astype(np.float32)
-    if len(npArray.shape) == 3:
-        npArray = np.transpose(npArray, (2, 0, 1)) ## VMImage(float[,,] data) has this format :: (bands,height,width)
     
-    net_im = asNetArray(npArray)
-    VMImageObject = VMIm.VMImage(net_im)
+    tmp = asNetArrayMemMove(npArray)
+   
+    VMImageObject = VMIm.VMImage(tmp)
+
+    
     return VMImageObject
             
 

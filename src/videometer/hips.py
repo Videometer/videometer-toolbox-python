@@ -6,7 +6,7 @@ path2ipp = os.path.join(VMPATH,"DLLs","IPP2019Update1","intel64")
 # If DLLs 
 if not os.path.isdir(path2ipp):
     print("Attention. \nRequired DLLs were not found. Let me get them for you")
-    from videometer.setupHelper import setupDlls
+    from setupHelper import setupDlls
     setupDlls()
 
 
@@ -15,8 +15,7 @@ os.environ["PATH"] += ";"+ path2ipp
 import matplotlib.pyplot as plt
 import numpy as np
 import clr
-import videometer.HelpFunctions as hf 
-
+import vmUtils as utils
 
 listOfDlls = ["VM.Image.IO.dll",
               "VM.Image.dll",
@@ -157,20 +156,20 @@ class ImageClass:
         bandIndexesToUse : Optional argument, give a list or numpy array of band indexes.."""
         
         if len(bandIndexesToUse) != 0:
-            hf.checkIfbandIndexesToUseIsValid(bandIndexesToUse,self.Bands)
+            utils.checkIfbandIndexesToUseIsValid(bandIndexesToUse,self.Bands)
         
         VMImageObject= VMImIO.HipsIO.LoadImage(path)
-        self.PixelValues = hf.vmImage2npArray(VMImageObject)
+        self.PixelValues = utils.vmImage2npArray(VMImageObject)
         
         (self.Height, self.Width, self.Bands) = self.PixelValues.shape
     
         self.Bands = int(VMImageObject.Bands)
         self.BandNames=np.array([str(bandname) for bandname in VMImageObject.BandNames]) 
-        self.Illumination=hf.illuminationObjects2List(VMImageObject.Illumination)
-        self.WaveLengths=hf.asNumpyArray(VMImageObject.WaveLengths)
-        self.StrobeTimes=hf.asNumpyArray(VMImageObject.StrobeTimes)
-        self.StrobeTimesUniversal = hf.asNumpyArray(VMImageObject.StrobeTimesUniversal)
-
+        self.Illumination=utils.illuminationObjects2List(VMImageObject.Illumination)
+        self.WaveLengths=utils.asNumpyArray(VMImageObject.WaveLengths)
+        self.StrobeTimes=utils.asNumpyArray(VMImageObject.StrobeTimes)
+        self.StrobeTimesUniversal = utils.asNumpyArray(VMImageObject.StrobeTimesUniversal)
+        
         self._BandCompressionModeObject = VMImageObject.BandCompressionMode
         self._QuantificationParametersObject = VMImageObject.QuantificationParameters
         self.MmPixel=VMImageObject.MmPixel
@@ -196,7 +195,7 @@ class ImageClass:
         self.ExtraDataString = dict()
         for i in VMImageObject.ExtraDataString.Keys:
             self.ExtraDataString[i]=VMImageObject.ExtraDataString[i]
-                  
+
         self._ReadAllImageLayers(VMImageObject)
 
         
@@ -218,16 +217,16 @@ class ImageClass:
         self._ReadFreehand(VMImageObject)
        
         # CorrectedPixels
-        self.CorrectedPixels = hf.imageLayer2npArray(getImageLayer(VMImageObject, "CorrectedPixels"))
+        self.CorrectedPixels = utils.imageLayer2npArray(getImageLayer(VMImageObject, "CorrectedPixels"))
         
         # DeadPixels
-        self.DeadPixels = hf.imageLayer2npArray(getImageLayer(VMImageObject, "DeadPixels"))
+        self.DeadPixels = utils.imageLayer2npArray(getImageLayer(VMImageObject, "DeadPixels"))
         
         # ForegroundPixels
-        self.ForegroundPixels = hf.imageLayer2npArray(getImageLayer(VMImageObject, "ForegroundPixels"))
+        self.ForegroundPixels = utils.imageLayer2npArray(getImageLayer(VMImageObject, "ForegroundPixels"))
 
         # SaturatedPixels
-        self.SaturatedPixels = hf.imageLayer2npArray(getImageLayer(VMImageObject, "SaturatedPixels"))
+        self.SaturatedPixels = utils.imageLayer2npArray(getImageLayer(VMImageObject, "SaturatedPixels"))
         
 
 
@@ -255,7 +254,7 @@ class ImageClass:
             bitmap = clr.System.Drawing.Bitmap(ms)
             vmImage = VMImIO.DotNetBitmapIO.GetVMImage(bitmap)
 
-            npArray = hf.vmImage2npArray(vmImage)[:,:,0]  
+            npArray = utils.vmImage2npArray(vmImage)[:,:,0]  
             npArray = npArray / np.max(npArray)           
             
             # Add to the freehandLayerDict with the same key as in VideometerLab software
@@ -283,12 +282,12 @@ class ImageClass:
         Output : 
             returns the sRGB image and updates the "RGBPixels" attribute """
         
-        SpectraNamesLUT = hf.get_SpectraNamesLUP()
+        SpectraNamesLUT = utils.get_SpectraNamesLUP()
         if not (spectraName in SpectraNamesLUT):
             raise NotImplementedError("spectraName=\"" + spectraName + "\" is not implemented. \nList of implemented spectras: "+str(list(SpectraNamesLUT.keys())))
 
         # Create a new VM object to parse through the SRGBViewTransform
-        VMImageObject = hf.npArray2VMImage(self.PixelValues)
+        VMImageObject = utils.npArray2VMImage(self.PixelValues)
 
         # Add attributes that are checked in IsValidFor()
         VMImageObject.AddToHistory(self.History)
@@ -302,7 +301,7 @@ class ImageClass:
 
         # Convert to sRGB image
         bitmap = converter.GetBitmap(VMImageObject, SpectraNamesLUT[spectraName])
-        srgbImage = hf.systemDrawingBitmap2npArray(bitmap)
+        srgbImage = utils.systemDrawingBitmap2npArray(bitmap)
         
         self.RGBPixels = srgbImage
 
@@ -332,7 +331,7 @@ class ImageClass:
    
         """
     
-        hf.checkIfbandIndexesToUseIsValid(bandIndexesToUse,self.Bands)
+        utils.checkIfbandIndexesToUseIsValid(bandIndexesToUse,self.Bands)
         self.PixelValues = self.PixelValues[:,:,bandIndexesToUse]
         self.Bands = len(bandIndexesToUse)
         self.BandNames = self.BandNames[bandIndexesToUse]
@@ -422,7 +421,7 @@ def write(image, path, compression="SameAsImageClass"):
         raise TypeError("Image input has to be either ImageClass object or 3-D NumPy array")
     
     if compression != "SameAsImageClass":
-        compressionLUT = hf.get_CompressionAndQuantificationPresetLUT()
+        compressionLUT = utils.get_CompressionAndQuantificationPresetLUT()
 
         if not compression in compressionLUT:
             listOfValid = list(compressionLUT.keys())
@@ -440,8 +439,7 @@ def write(image, path, compression="SameAsImageClass"):
         bandCompressionMode = image._BandCompressionModeObject
         quantificationParameters  = image._QuantificationParametersObject
 
-
-    Image_net = hf.npArray2VMImage(imagearr)
+    Image_net = utils.npArray2VMImage(imagearr)
 
     if(type(image) == ImageClass):
         #NOTE - DO NOT REMOVE THE CASTING TO THE TYPES str(),float(),int()
@@ -454,8 +452,7 @@ def write(image, path, compression="SameAsImageClass"):
         Image_net.AddToHistory(str(image.History))
         Image_net.MmPixel = float(image.MmPixel)
 
-        illuminations_objects = hf.illuminationList2Objects(image.Illumination)
-
+        illuminations_objects = utils.illuminationList2Objects(image.Illumination)
         for i in range(image.Bands):
             Image_net.WaveLengths[i] = float(image.WaveLengths[i])
             Image_net.StrobeTimes[i] = int(image.StrobeTimes[i])
@@ -463,15 +460,15 @@ def write(image, path, compression="SameAsImageClass"):
             Image_net.BandNames[i] = str(image.BandNames[i])
             Image_net.StrobeTimesUniversal[i] = float(image.StrobeTimesUniversal[i])
 
+
         for k,v in image.ExtraData.items():
             Image_net.ExtraData[k] = float(v)
         for k,v in image.ExtraDataInt.items():
             Image_net.ExtraDataInt[k] = int(v)
         for k,v in image.ExtraDataString.items():
             Image_net.ExtraDataString[k] = str(v)      
-
         
-        Image_net = hf.addAllAvailableImageLayers(Image_net, image)
+        Image_net = utils.addAllAvailableImageLayers(Image_net, image)
 
     VMImIO.HipsIO.SaveImage(Image_net, str(path))
 
@@ -557,7 +554,7 @@ def show(image, ifUseMask=False ,bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
 
     
     if len(bandIndexesToUse) != 0:
-        hf.checkIfbandIndexesToUseIsValid(bandIndexesToUse,imagearr.shape[2])
+        utils.checkIfbandIndexesToUseIsValid(bandIndexesToUse,imagearr.shape[2])
     else:
         bandIndexesToUse = list(range(imagearr.shape[2]))
 
@@ -571,7 +568,7 @@ def show(image, ifUseMask=False ,bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
         plt.axis('off')
 
     if not ifOnlyGetListOfPLTObjects:
-        plt.show(block=False)
+        plt.show(block=True)
 
     return plt_outputs
 
@@ -620,10 +617,4 @@ def showRGB(imageClass, ifUseMask=False):
     plt.title('RGB image')
     plt.axis('off')
     return ax_im
-
-
-# def __dir__():
-#     return ["ImageClass","read","write","ReduceBands","show", "showRGB"]
-
-
 
