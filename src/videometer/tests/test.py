@@ -1,5 +1,5 @@
-import videometer.hips as hips
-import videometer.vmUtils as utils
+from videometer import hips
+from videometer import vmUtils as utils
 import os
 import numpy as np
 import unittest
@@ -188,6 +188,8 @@ class Test02OnImagesRead(unittest.TestCase):
 class Test01OnImagesWrite(unittest.TestCase):
     @classmethod
     def setUpClass(self):
+        if not os.path.isdir("TestImagesWriting"):
+            os.mkdir("TestImagesWriting")
         self.ImageClass = hips.read(self.imagePath) 
 
     def test_WriteImageClass(self):
@@ -336,14 +338,14 @@ class TestVMfunctions(unittest.TestCase):
 
 class TestHelperFunctions(unittest.TestCase):
 
-    def test_asNetArray(self):
+    def test_asNetArrayMemMove(self):
         N = 5
         sysArr = clr.System.Array.CreateInstance(System.Single, N)
         for i in range(N):
             sysArr[i] = float(i)
         npArr = np.arange(N, dtype=np.float32)
         
-        npArr2sys = utils.asNetArray(npArr)
+        npArr2sys = utils.asNetArrayMemMove(npArr)
 
         for i in range(N):
             self.assertEqual(sysArr[i], npArr2sys[i])
@@ -363,7 +365,7 @@ class TestHelperFunctions(unittest.TestCase):
 
     def test_imageLayer2npArray(self):
         npArr = np.array([[1,0,1],[0,1,0]],dtype=np.float32) 
-        img = VMIm.VMImage(utils.asNetArray(npArr))
+        img = VMIm.VMImage(utils.asNetArrayMemMove(npArr))
         imageLayer = VMIm.ImageLayer(img)
 
         img2npArr = utils.imageLayer2npArray(imageLayer)
@@ -429,7 +431,7 @@ class TestHelperFunctions(unittest.TestCase):
     def test_vmImage2npArray(self):
         npArr = np.array([[[1,2,3],[4,5,6]]],dtype=np.float32) 
         npArr2VMimg = np.transpose(npArr, (2,0,1))
-        img = VMIm.VMImage(utils.asNetArray(npArr2VMimg))
+        img = VMIm.VMImage(utils.asNetArrayMemMove(npArr2VMimg))
 
         npArrFromImg = utils.vmImage2npArray(img)
 
