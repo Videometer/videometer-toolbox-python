@@ -252,9 +252,8 @@ class ImageClass:
             # FreehandLayerIOContainer.pixels to npArray
             ms = clr.System.IO.MemoryStream(container.pixels)
             bitmap = clr.System.Drawing.Bitmap(ms)
-            vmImage = VMImIO.DotNetBitmapIO.GetVMImage(bitmap)
 
-            npArray = utils.vmImage2npArray(vmImage)[:,:,0]  
+            npArray = utils.systemDrawingBitmap2npArray(bitmap)[:,:,0]
             npArray = npArray / np.max(npArray)           
             
             # Add to the freehandLayerDict with the same key as in VideometerLab software
@@ -266,7 +265,6 @@ class ImageClass:
                 }
             freehandLayerList.append(freehandObject)
             
-            vmImage.Free()
 
         self.FreehandLayers=freehandLayerList 
 
