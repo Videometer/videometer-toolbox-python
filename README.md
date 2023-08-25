@@ -1,7 +1,7 @@
 # Videometer toolbox for Python 
 
 A toolbox for multispectral .HIPS images from Videometer A/S
-
+<br>
 
 ## Installation 
   
@@ -19,6 +19,7 @@ pip install videometer
 
 **Note : First time the videometer.hips is imported it will fetch DLLs**
 
+<br>
 
 
 
@@ -49,11 +50,13 @@ from videometer import hips
 imageCls = hips.read("image.hips")
 ```
 
+<br>
 
 ## Usage - Write
 
 ### videometer.hips.write(image, path, compression="SameAsImageClass")  
-&emsp;&emsp;  Writes a HIPS image from an ImageClass object or a NumPy array that corresponds to the pixel values of a spectral image.  
+&emsp;&emsp;  Writes a HIPS image from an ImageClass object or a NumPy array that corresponds  
+&emsp;&emsp; to the pixel values of a spectral image.  
 
 &emsp;&emsp;  *Parameters*  
 &emsp;&emsp; &emsp;&emsp; **Input** :  
@@ -61,7 +64,8 @@ imageCls = hips.read("image.hips")
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **path \<String>**:  path of the to be written HIPS file.   
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; Note it has to include the .hips extension and a existing folder structure.  
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **compression \<String>**:   Compression level of the image, same as in VideometerLab   
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; &emsp;&emsp;   (Table can be seen below and more detailed one in VideometerLab File > Preferences > Compression ) :   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; &emsp;&emsp; (Table can be seen below and more detailed one in VideometerLab under   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; File > Preferences > Compression ) :   
 ```
 Level of Compression : {
     "SameAsImageClass" : Keep the same compression as is in the ImageClass 
@@ -122,17 +126,18 @@ else:
 ```
 
 
+<br>
+
 ## Usage - Show
 
-### videometer.hips.show(image, ifUseMask=False ,bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=False):  
-&emsp;&emsp;  Function that shows individual bands of the image. By default it displays all the bands, but if only certain bands want to be ploted,   
-&emsp;&emsp; assign bands as a list or integer.   
+### videometer.hips.show(  image, ifUseMask=False, bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=False):  
+&emsp;&emsp;  Function that shows images of individual bands.   
 
 &emsp;&emsp;  *Parameters*  
 &emsp;&emsp; &emsp;&emsp; **Input** :    
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **image \<ImageClass OR 3-D NumPy array>**:  ImageClass object or NumPy array (3-D).   
 
-&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **ifUseMask \<Boolean>**        If set to true and mask is set on the ImageClass object then the image will show masked.  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **ifUseMask \<Boolean>** If set to true and mask is set on the ImageClass object then the image will show masked.  
 
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **bandIndexesToUse \<List of Ints>** (optional) : List of Indexes of the bands to be shown.   
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; If empty then it will return all of them (default).   
@@ -146,11 +151,13 @@ else:
 
 
 
+<br>
 
 ## Usage - Show RGB
 
 ### videometer.hips.showRGB(imageClass, ifUseMask=False):  
-&emsp;&emsp;  Function that shows srgb representation of the image. If ifUseForegroundMask is true then the image will be shown masked.  
+&emsp;&emsp;  Function that shows srgb representation of the image.  
+&emsp;&emsp; If ifUseForegroundMask is true then the image will be shown masked.  
 
 &emsp;&emsp; *Parameters*    
 &emsp;&emsp; &emsp;&emsp; **Input** :    
@@ -169,6 +176,7 @@ else:
 
 
 
+<br>
 
 
 
@@ -220,7 +228,7 @@ The center of the toolbox.
     "name" : <string>
     "layerId" : <int>
     "description" : <string>
-    "pixels" :  <2-D numpy array of 0 and 1>
+    "pixels" :  <2-D numpy array>
 }    
 ```    
 
@@ -273,7 +281,8 @@ The center of the toolbox.
     
 - **extractBands**(bandIndexesToUse)  
 &emsp;&emsp;    Similar to the Image Tools > Conversion > Extract bands in VideometerLab software.   
-&emsp;&emsp;  The bands and their information given in the bandsIndexesToUse remain in the ImageClass, others are deleted.
+&emsp;&emsp;  The bands and their information given in the bandsIndexesToUse remain in the ImageClass,   
+&emsp;&emsp; others are deleted.
 
 &emsp;&emsp;  *Parameters*  
 &emsp;&emsp; &emsp;&emsp; **Input** :  
@@ -284,6 +293,7 @@ The center of the toolbox.
 
 
 
+<br>
 
 ## Bugs or suggestions
 
