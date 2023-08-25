@@ -99,7 +99,7 @@ Very High Compression  | 8 bit JPEG | 0.47 + Edge artifacts | 31MB (3%)|
 from videometer import hips
 
 imageCls = hips.read("image.hips")
-fullPath2Image = hips.write(ImageCls,"image.hips",compression="HighCompression")
+fullPath2Image = hips.write(imageCls,"image.hips",compression="HighCompression")
 
 if fullPath2Image is None:
     print("FAILED")
