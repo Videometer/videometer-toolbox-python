@@ -415,9 +415,12 @@ def write(image, path, compression="SameAsImageClass"):
             listOfValid.append("SameAsImageClass")
             raise NotImplementedError(compression + " is not implemented. \nList of valid : " + str(listOfValid)) 
         
-        bandCompressionMode = compressionLUT[compression].CompressionParameters
+        if compression == "Uncompressed":
+            bandCompressionMode = None
+        else:
+            bandCompressionMode = compressionLUT[compression].CompressionParameters.CompressionMode
         quantValue = compressionLUT[compression].QuantificationParameters
-        bands = image.shape[2]
+        bands = imagearr.shape[2]
         quantificationParameters = clr.System.Array.CreateInstance(VMIm.Compression.QuantificationParameters, bands)
         for i in range(bands):
             quantificationParameters[i] = quantValue
