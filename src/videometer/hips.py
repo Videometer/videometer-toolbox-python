@@ -39,17 +39,8 @@ import VM.Image.ViewTransforms as VMImTransForms
 class ImageClass:
     """Attributes:
     --------------
-    MmPixel - float
-        physical size of each pixel in mm.
-
-    StrobeTimesUniversal - NumPy array of floats (1-D)
-        Universal strobe time of every band in the image.
-
-    BandNames - NumPy array of strings (1-D)
-        List of names of the bands.
-
-    PixelValues - NumPy array of floats (3-D)
-        Contains pixel values of the HIPS image. Shape of an array is 
+    PixelValues - NumPy array (3-D)
+        Contains float pixel values of the HIPS image. Shape of the array is 
         (height, width, bands).
     
     Height - int
@@ -58,8 +49,14 @@ class ImageClass:
     Width - int
         Width of the HIPS image.
 
+    MmPixel - float
+        physical size of each pixel in mm.
+        
     Bands - int
         Number of bands in the image.
+    
+    BandNames - NumPy array of strings (1-D)
+        List of names of the bands.
     
     WaveLengths - NumPy array of floats (1-D)
         Contains wavelenghts of the bands in HIPS image.
@@ -75,6 +72,9 @@ class ImageClass:
             
     StrobeTimes – NumPy array of int32 (1-D)
         Strobe time of each band in the image.
+
+    StrobeTimesUniversal - NumPy array of floats (1-D)
+        Universal strobe time of every band in the image.
     
     FreehandLayers – List of dictionaries
         Each set FreehandLayer is a dictionary (hashmap) with the following keys :
@@ -123,27 +123,12 @@ class ImageClass:
     init(image_array, image_object, bandIndexesToUse=[])
         Initializes the class. Called when reading an image.
     
-    dir()
-        Displays attributes of the class.
-    
-    
-    _ReadAllImageLayers(VM.Image.VMImage)
-        Reads the CorrectedPixels, DeadPixels, ForegroundPixels and SaturatePixels
-        from the VM.Image.VMImage object and sets them to their respective attribute. 
-        Then calls _ReadFreehand. 
-        This method is called when initializing the class
-
-    _ReadFreehand(VM.Image.VMImage)
-        Reads FreehandLayers layers of the image. Updates 'FreehandLayers' attribute.
-        The method is called when initializing the class.
-    
     To_sRGB(bandIndexesToUse=[])
         Performs conversion of the spectral image to sRGB image. Updates
         'RGBPixels' attribute.
     
-    _ReduceBands(bandIndexesToUse)
+    reduceBands(bandIndexesToUse)
         Reduces bands of the image. The bands that will remain are given by bandIndexesToUse.
-    
     """
         
     def __init__(self, path, bandIndexesToUse=[]):
@@ -200,7 +185,7 @@ class ImageClass:
 
         
         if len(bandIndexesToUse) != 0:
-            self.ReduceBands(bandIndexesToUse)
+            self.reduceBands(bandIndexesToUse)
             
     
     def _ReadAllImageLayers(self, VMImageObject):
@@ -269,7 +254,7 @@ class ImageClass:
         self.FreehandLayers=freehandLayerList 
 
 
-    def To_sRGB(self,spectraName='D65'):
+    def to_sRGB(self,spectraName='D65'):
         """Performs conversion of the spectral image to sRGB image.
         
         Parameters:
@@ -292,7 +277,7 @@ class ImageClass:
         for i in range(self.Bands):
             VMImageObject.WaveLengths[i] = float(self.WaveLengths[i])
 
-        # Converted initialization and check
+        # Converter initialization and check
         converter = VMImTransForms.MultiBand.SRGBViewTransform()
         if not converter.IsValidFor(VMImageObject):
             raise TypeError("VM.Image.NaturalColorConversion.InvalidConversionException: Only reflectance calibrated images are supported")
@@ -306,7 +291,7 @@ class ImageClass:
         return srgbImage
 
 
-    def _ReduceBands(self,bandIndexesToUse):
+    def reduceBands(self,bandIndexesToUse):
         """Reduces bands of the image.
         
         Parameters:
@@ -408,6 +393,10 @@ def write(image, path, compression="SameAsImageClass"):
     
     if not (path.endswith(".hips")):
         raise TypeError("File needs to contain the .hips extension :" + path)
+    folderPath = os.path.dirname(os.path.abspath(path))
+    if not (os.path.isdir(folderPath)):
+        raise FileNotFoundError("The folder structure not found under " + path + " : " + folderPath )
+
         
     if ((type(image) == np.ndarray) and (len(image.shape)==3)):
         imagearr = image
@@ -479,29 +468,6 @@ def write(image, path, compression="SameAsImageClass"):
     else:
         print("Failed to write HIPS image")
         return None
-    
-
-def ReduceBands(imageClass, bandIndexesToUse=[]):
-    """Reduces the bands in the imageClass to the ones who are in bandIndexesToUse
-    
-    Parameters:
-    -----------
-    imageClass - ImageClass object.
-    
-    bandIndexesToUse - list or numpy array
-        Optional argument that corresponds to the bands that want to be shown.
-    
-    Outputs:
-    --------
-    imageClass - Same as input but only with bands in the bandIndexesToUse 
-    """
-    
-    if type(imageClass) != ImageClass:
-        raise TypeError("imageClass needs to be a ImageClass object")
-
-    imageClass._ReduceBands(bandIndexesToUse)
-    return imageClass
-
 
     
 def show(image, ifUseMask=False ,bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=False):
@@ -529,13 +495,11 @@ def show(image, ifUseMask=False ,bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
     plt_outputs - list
         List of matplotlib.image.AxesImage objects. This list is used to test
         the function, and on its own, it has no value for the user. Therefore,
-        it is excluded from documentation. The same will apply for the remaining
-        show functions."""
+        it is excluded from documentation."""
     
     if (type(image)!=ImageClass) or (type(image)==np.ndarray and len(image.shape)==3):
         raise TypeError("image needs to be a ImageClass object or 3-D numpy array")
     
-    plt_outputs=[]
     if(type(image)==ImageClass):
         imagearr = image.PixelValues
         if ifUseMask:
@@ -556,6 +520,7 @@ def show(image, ifUseMask=False ,bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
     else:
         bandIndexesToUse = list(range(imagearr.shape[2]))
 
+    plt_outputs=[]
     for i in bandIndexesToUse:
         plt.figure(num=i)
         v_min=np.min(imagearr[:,:,i])
@@ -597,7 +562,7 @@ def showRGB(imageClass, ifUseMask=False):
         raise TypeError("imageClass needs to be a ImageClass object")
 
     if (imageClass.RGBPixels is None):
-        imageClass.To_sRGB()
+        imageClass.to_sRGB()
     image_arr = imageClass.RGBPixels
 
     imrgb = np.empty_like(image_arr)

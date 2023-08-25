@@ -19,6 +19,7 @@ import VM.Image.IO as VMImIO
 # Notes about the testing 
 # - The number of the classes TestXXOnImages are to correct the order of the test running 
 #   since we need the class created images before we run all of them  
+# - Need to test the writing with different compressions... 
 
 
 
@@ -260,7 +261,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
     def test_ReduceBands(self):
         bandsIndexesToUse = [0,18]
         bands = len(bandsIndexesToUse)
-        self.ImageClassReduced = hips.ReduceBands(self.ImageClassReduced, bandsIndexesToUse)
+        self.ImageClassReduced.reduceBands(bandsIndexesToUse)
         
         self.assertTrue(np.all(self.ImageClassReduced.PixelValues.shape == (self.ImageClassReduced.Height,self.ImageClassReduced.Width,bands)))
         self.assertEqual(self.ImageClassReduced.Bands, bands)
@@ -311,8 +312,8 @@ class TestVMfunctions(unittest.TestCase):
     def setUpClass(self): 
         self.ImageClass = hips.read("calibratedImage.hips")
 
-    def test_To_sRGB(self):
-        img = self.ImageClass.To_sRGB(spectraName="D65")
+    def test_to_sRGB(self):
+        img = self.ImageClass.to_sRGB(spectraName="D65")
         self.assertIs(type(img), np.ndarray)
         self.assertEqual(img.shape, (3,3,3))
         self.assertEqual(type(img[0,0,0]), np.uint8)
