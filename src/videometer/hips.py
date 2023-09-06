@@ -611,3 +611,51 @@ def showRGB(imageClass, ifUseMask=False):
     plt.axis('off')
     return ax_im
 
+
+
+
+def readOnlyPixelValues(path):
+    """Function that reads the HIPS image and returns its pixel values
+
+    Parameters:
+    -----------
+    path - path to the .hips image
+            
+    
+    Outputs:
+    --------
+    Returns a 3-D numpy float array.
+    """
+    if not os.path.isfile(path):
+        raise FileNotFoundError(path)
+
+    if not path.endswith(".hips"):
+        raise TypeError("File name has to have the .hips extension")
+    
+    VMImageObject = VMImIO.HipsIO.LoadImage(path)
+    npArray = utils.vmImage2npArray(VMImageObject)
+    VMImageObject.Free()
+
+    return npArray
+
+
+
+
+if __name__ == "__main__":
+    img = read(r"C:\Users\jmk\Downloads\TestEverythingImage_Original.hips")
+    print(img.FreehandLayers[0]["pixels"])
+    print("-----------------------------------------------")
+
+    path = r"C:\Users\jmk\Downloads\TestEverythingImage_Original_NEW.hips"
+    write(img, path)
+
+    print("-------------------------------")
+    
+    img = read(path)
+    print(img.FreehandLayers[0]["pixels"].shape)
+    # print(img.PixelValues.shape)
+
+    # t = img.FreehandLayers[0]["pixels"]
+    # for i in range(t.shape[-1]):
+    #     print(t[:,:,i])
+

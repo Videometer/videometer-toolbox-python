@@ -26,7 +26,7 @@ pip install videometer
 
 ## Usage - Read
 
-### videometer.hips.read(spectraName="D65")  
+### videometer.hips.read(path, bandIndexesToUse=[])  
 &emsp;&emsp;  Reads a HIPS image and stores it as an ImageClass object.  
 
 &emsp;&emsp;  *Parameters*  
@@ -49,6 +49,33 @@ ImageClass is explained below.
 from videometer import hips
 
 imageCls = hips.read("image.hips")
+```
+
+<br>
+
+
+## Usage - readOnlyPixelValues
+
+### videometer.hips.readOnlyPixelValues(path)  
+&emsp;&emsp;  Reads a HIPS image and returns pixel values in a 3-D Numpy array.    
+&emsp;&emsp;  Makes the reading quicker when only the pixel values are wanted.
+
+
+&emsp;&emsp;  *Parameters*  
+&emsp;&emsp; &emsp;&emsp; **Input** :  
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **path \<String>**: Path to the image.
+
+
+&emsp;&emsp; &emsp;&emsp; **Output** :   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - 3-D Numpy array 
+
+
+### Example
+
+```python
+from videometer import hips
+
+img = hips.readOnlyPixelValues("image.hips")
 ```
 
 <br>
