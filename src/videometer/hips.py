@@ -239,8 +239,7 @@ class ImageClass:
         # Would be easier to Get image with the help of VM.Image.IO 
         # vmImg = VMImIO.FreehandLayerIO.GetMaskFromFreehandLayerXmlString(VMImageObject, container.layerId)  
         # but for some reason throws a SystemOutOfMemory exception
-        
-        freehandLayersIO = VMFreehand.FreehandLayerIO.DeserializeFromString(VMImageObject.FreehandLayersXML)
+        freehandLayersIO = VMFreehand.FreehandLayerIO.DeserializeFromString(freehandLayersXMLstring)
         if freehandLayersIO is None:
             return 
         
@@ -249,9 +248,13 @@ class ImageClass:
             # FreehandLayerIOContainer.pixels to npArray
             ms = clr.System.IO.MemoryStream(container.pixels)
             bitmap = clr.System.Drawing.Bitmap(ms)
-
-            npArray = utils.systemDrawingBitmap2npArray(bitmap)[:,:,0]
-            npArray = npArray / np.max(npArray)           
+            npArray = utils.systemDrawingBitmap2npArray(bitmap)
+            
+            if len(npArray.shape) == 3:
+                npArray = npArray[:,:,0]
+            npMax = np.max(npArray)
+            if npMax != 0.0:
+                npArray = npArray / np.max(npArray)           
             
             # Add to the freehandLayerDict with the same key as in VideometerLab software
             freehandObject = {
@@ -261,7 +264,9 @@ class ImageClass:
                 "pixels" :  npArray
                 }
             freehandLayerList.append(freehandObject)
-            
+
+            bitmap.Dispose()
+            ms.Dispose()
 
         self.FreehandLayers=freehandLayerList 
 

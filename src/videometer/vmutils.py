@@ -3,6 +3,7 @@ import os
 import clr, System
 import numbers
 import ctypes
+from PIL import Image
 
 from System.Runtime.InteropServices import GCHandle, GCHandleType
 
@@ -43,9 +44,12 @@ def imageLayer2npArray(imageLayer):
         pass
     
     npArray = vmImage2npArray(vmImg)[:,:,0]
+    npMax = np.max(npArray)
+    if npMax != 0.0:
+        npArray = npArray/npMax
 
     vmImg.Free()
-    return (npArray/np.max(npArray)).astype(np.int32)
+    return npArray.astype(np.int32)
     
 
 
@@ -174,7 +178,7 @@ def setFreehandLayers(VMImageObject, ImageClass):
 
     for i, freehandLayer in enumerate(ImageClass.FreehandLayers):
         # pixels from numpy array to Byte[,]
-        pixels = freehandLayer["pixels"]
+        pixels = freehandLayer["pixels"].astype(np.float32)
         pixelsVMImage = npArray2VMImage(pixels)
 
         bitmap = VMImIO.DotNetBitmapIO.GetBitmap(pixelsVMImage)
@@ -192,7 +196,6 @@ def setFreehandLayers(VMImageObject, ImageClass):
     FreehandLayerIO = VMFreehand.FreehandLayerIO(arrayOfContainers)
     
     VMImageObject.FreehandLayersXML = FreehandLayerIO.SerializeToString()
-
 
     return VMImageObject
     
@@ -278,14 +281,23 @@ def get_SpectraNamesLUP():
 
 
 def systemDrawingBitmap2npArray(bitmap):
-    npArray = np.zeros((bitmap.Height, bitmap.Width, 3), np.uint8)
-    # Ignoring the A 
-    for y in range(bitmap.Height):
-        for x in range(bitmap.Width):
-            pixel = bitmap.GetPixel(x,y)
-            npArray[y,x,0] = pixel.R
-            npArray[y,x,1] = pixel.G
-            npArray[y,x,2] = pixel.B
+    # input a bitmap and return a numpy array
+
+
+    # Note from devs : 
+    # Save bitmap from c# and read it from numpy (honestly not my best idea but works)
+    # This is done because its quicker and easier easier than changing it to VM Image 
+    # and turning that into npArray. Also avoids the problem of reading a RGB Vm Image
+    # with GetPixelValues().
+    # No System.Drawing.Bitmap to numpy array method was found if it is found please
+    # switch it out for this.
+
+    pathBitmapTmp = os.path.join(os.path.dirname(os.path.abspath(__file__)),"tmp.png")
+    bitmap.Save(pathBitmapTmp)
+    npArray = np.array(Image.open(pathBitmapTmp))
+    os.remove(pathBitmapTmp)
+
+    bitmap.Dispose()
 
     return npArray
 
