@@ -286,13 +286,17 @@ class ImageClass:
         if not (spectraName in SpectraNamesLUT):
             raise NotImplementedError("spectraName=\"" + spectraName + "\" is not implemented. \nList of implemented spectras: "+str(list(SpectraNamesLUT.keys())))
 
-        # Create a new VM object to parse through the SRGBViewTransform
-        VMImageObject = utils.npArray2VMImage(self.PixelValues)
+        # Create a new VM object to parse through the SRGBViewTransform with only the visable wavelengths
+        visableBands = (380 <= self.WaveLengths) * (self.WaveLengths <= 780)
+        if np.sum(visableBands) < 3:
+            raise TypeError("Image class needs to have 3 or more wavelengths on the visable spectrum (380mm <= wavelength <= 780mm). Number of visable wavelength in ImageClass : "+str(np.sum(visableBands)))
+        VMImageObject = utils.npArray2VMImage(self.PixelValues[:,:,visableBands])
 
         # Add attributes that are checked in IsValidFor()
         VMImageObject.AddToHistory(self.History)
-        for i in range(self.Bands):
-            VMImageObject.WaveLengths[i] = float(self.WaveLengths[i])
+        indexVisableBands = np.where(visableBands)[0]
+        for i in range(len(indexVisableBands)):
+            VMImageObject.WaveLengths[i] = float(self.WaveLengths[indexVisableBands[i]])
 
         # Converter initialization and check
         converter = VMImTransForms.MultiBand.SRGBViewTransform()
@@ -301,8 +305,7 @@ class ImageClass:
 
         # Convert to sRGB image
         bitmap = converter.GetBitmap(VMImageObject, SpectraNamesLUT[spectraName])
-        srgbImage = utils.systemDrawingBitmap2npArray(bitmap)
-        
+        srgbImage = utils.systemDrawingBitmap2npArray(bitmap).astype(np.uint8)       
         self.RGBPixels = srgbImage
 
         return srgbImage
@@ -586,7 +589,10 @@ def showRGB(imageClass, ifUseMask=False):
     if type(imageClass) != ImageClass:
         raise TypeError("imageClass needs to be a ImageClass object")
 
-    if (imageClass.RGBPixels is None):
+    # This is a problematic statement 
+    # if the user calls it > changes the images > calls it again
+    # then it will display the old image .... 
+    if (imageClass.RGBPixels is None):  
         imageClass.to_sRGB()
     image_arr = imageClass.RGBPixels
 
