@@ -131,21 +131,29 @@ class ImageClass:
         Reduces bands of the image. The bands that will remain are given by bandIndexesToUse.
     """
         
-    def __init__(self, path, bandIndexesToUse=[]):
+    def __init__(self, path, bandIndexesToUse=[], ifSkipReadingAllLayers=False, ifSkipReadingFreehandLayer=False):
         """Initializes the class. Called when reading an image.
         Parameters:
         -----------
         path : string
             Path to the image that will be stored as an object of ImageClass.
         
-        bandIndexesToUse : Optional argument, give a list or numpy array of band indexes.."""
+        bandIndexesToUse : Optional argument, give a list or numpy array of band indexes
+        
+        ifSkipReadingAllLayers : Optional argument, If set to True it will skip reading all the Image Layers. 
+                                Makes the reading quicker. Default is False.
+
+        ifSkipReadingFreehandLayer : Optional argument, If set to True it will skip reading all the Freehand Layers. 
+                                Makes the reading quicker. Default is False.
+
+        """
         
         if len(bandIndexesToUse) != 0:
             utils.checkIfbandIndexesToUseIsValid(bandIndexesToUse,self.Bands)
         
         VMImageObject= VMImIO.HipsIO.LoadImage(path)
         self.PixelValues = utils.vmImage2npArray(VMImageObject)
-        
+
         (self.Height, self.Width, self.Bands) = self.PixelValues.shape
     
         self.Bands = int(VMImageObject.Bands)
@@ -180,17 +188,20 @@ class ImageClass:
         self.ExtraDataString = dict()
         for i in VMImageObject.ExtraDataString.Keys:
             self.ExtraDataString[i]=VMImageObject.ExtraDataString[i]
-
-        self._ReadAllImageLayers(VMImageObject)
-
+            
+        if not ifSkipReadingAllLayers:
+            self._ReadAllImageLayers(VMImageObject, ifSkipReadingFreehandLayer)
         
         if len(bandIndexesToUse) != 0:
             self.reduceBands(bandIndexesToUse)
             
     
-    def _ReadAllImageLayers(self, VMImageObject):
+    def _ReadAllImageLayers(self, VMImageObject,ifSkipReadingFreehandLayer):
         """Calls _ReadFreehand, _ReadCorrected, _ReadForeground, _ReadDead and _ReadSaturated.
         This method is called when initializing the class.
+
+        ifSkipReadingFreehandLayer : If set to True it will skip reading all the Freehand Layers. 
+                                Makes the reading quicker. 
         
         Parameters: None
         
@@ -199,14 +210,15 @@ class ImageClass:
         getImageLayer = VMIm.ImageLayerExtensions.GetImageLayer
 
         # Freehand Layer
-        self._ReadFreehand(VMImageObject)
+        if not ifSkipReadingFreehandLayer:
+            self._ReadFreehand(VMImageObject.FreehandLayersXML)
        
         # CorrectedPixels
         self.CorrectedPixels = utils.imageLayer2npArray(getImageLayer(VMImageObject, "CorrectedPixels"))
         
         # DeadPixels
         self.DeadPixels = utils.imageLayer2npArray(getImageLayer(VMImageObject, "DeadPixels"))
-        
+
         # ForegroundPixels
         self.ForegroundPixels = utils.imageLayer2npArray(getImageLayer(VMImageObject, "ForegroundPixels"))
 
@@ -215,7 +227,7 @@ class ImageClass:
         
 
 
-    def _ReadFreehand(self, VMImageObject):
+    def _ReadFreehand(self, freehandLayersXMLstring):
         """Reads FreehandLayers layers of the image. Updates 'FreehandLayers' attribute.
         The method is called when initializing the class.
         
@@ -338,7 +350,7 @@ class ImageClass:
 # ---------------- Start of functions ---------------- 
 
 
-def read(path, bandIndexesToUse=[]):
+def read(path, bandIndexesToUse=[], ifSkipReadingAllLayers=False, ifSkipReadingFreehandLayer=False):
     """Reads a HIPS image and stores it as an ImageClass object.
     
     Parameters:
@@ -347,8 +359,14 @@ def read(path, bandIndexesToUse=[]):
         Full path to the image that wants to be read.
     
     bandIndexesToUse - list or numpy array of integers
-        Additional argument if only certain bands of the image want to be read.
-    
+        Additional argument if only certain bands of the image want to be read.        
+        
+    ifSkipReadingAllLayers : Optional argument, If set to True it will skip reading all the Image Layers. 
+                                Makes the reading quicker. Default is False.
+
+    ifSkipReadingFreehandLayer : Optional argument, If set to True it will skip reading all the Freehand Layers. 
+                                Makes the reading quicker. Default is False.
+
     Outputs:
     --------
     image - ImageClass object
@@ -361,9 +379,8 @@ def read(path, bandIndexesToUse=[]):
         raise ValueError("File needs to contain the .hips extension :" + path)
     if not os.path.isfile(path):
         raise FileNotFoundError("Couldn't locate " + path)
-     
 
-    return ImageClass(path, bandIndexesToUse) 
+    return ImageClass(path, bandIndexesToUse, ifSkipReadingAllLayers, ifSkipReadingFreehandLayer) 
     
 
 def write(image, path, compression="SameAsImageClass"):
