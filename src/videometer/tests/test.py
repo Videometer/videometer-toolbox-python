@@ -4,6 +4,7 @@ import os
 import numpy as np
 import unittest
 from parameterized import parameterized_class
+import matplotlib.pyplot as plt
 
 
 import clr
@@ -213,6 +214,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
 
     def test_show(self):
         plt_outputs = hips.show(self.ImageClass, ifOnlyGetListOfPLTObjects=True)
+        plt.close("all")
 
         images = np.array([p.get_array() for p in plt_outputs])     
         titles = np.array([p.axes.get_title() for p in plt_outputs])    
@@ -232,6 +234,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
         bands = len(bandIndexesToUse)
 
         plt_outputs = hips.show(self.ImageClass, bandIndexesToUse=bandIndexesToUse, ifOnlyGetListOfPLTObjects=True)
+        plt.close("all")
         images = np.array([p.get_array() for p in plt_outputs])     
         titles = np.array([p.axes.get_title() for p in plt_outputs])   
     
@@ -250,6 +253,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
     def test_showMasked(self):
         self.ImageClassMasked.ForegroundPixels = np.array([[0,0,0],[0,0,0]],dtype=np.uint8)
         plt_outputs = hips.show(self.ImageClassMasked, ifUseMask=True, ifOnlyGetListOfPLTObjects=True)
+        plt.close("all")
         images = np.array([p.get_array() for p in plt_outputs])     
         titles = np.array([p.axes.get_title() for p in plt_outputs])    
 
@@ -333,6 +337,7 @@ class TestVMfunctions(unittest.TestCase):
 
     def test_showRGB(self):
         axImg = hips.showRGB(self.ImageClass)
+        plt.close("all")
         self.assertTrue(np.all(self.ImageClass.RGBPixels == axImg.get_array()))
 
 

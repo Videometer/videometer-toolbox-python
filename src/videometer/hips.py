@@ -422,7 +422,6 @@ def write(image, path, compression="SameAsImageClass"):
     if not (os.path.isdir(folderPath)):
         raise FileNotFoundError("The folder structure not found under " + path + " : " + folderPath )
 
-        
     if ((type(image) == np.ndarray) and (len(image.shape)==3)):
         imagearr = image
         if compression == "SameAsImageClass":
@@ -559,7 +558,7 @@ def show(image, ifUseMask=False ,bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
         plt.axis('off')
 
     if not ifOnlyGetListOfPLTObjects:
-        plt.show(block=True)
+        plt.show()
 
     return plt_outputs
 
