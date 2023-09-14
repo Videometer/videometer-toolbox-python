@@ -10,7 +10,7 @@ if not os.path.isdir(path2ipp):
     setupDlls()
 
 # Add the path to the IPP files at the front to it will be checked first
-os.environ["PATH"] = os.environ["PATH"]  + path2ipp + ";" 
+os.environ["PATH"] = path2ipp + ";" + os.environ["PATH"]
 
 import matplotlib.pyplot as plt
 import numpy as np
