@@ -1,6 +1,8 @@
+import os
+os.environ["PATH"] = "" # Remove everything temporary in system path
+
 from videometer import hips
 from videometer import vmUtils as utils
-import os
 import numpy as np
 import unittest
 from parameterized import parameterized_class
