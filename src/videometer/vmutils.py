@@ -193,6 +193,8 @@ def setFreehandLayers(VMImageObject, ImageClass):
 
         arrayOfContainers[i] = container
 
+        pixelsVMImage.Free()
+
     FreehandLayerIO = VMFreehand.FreehandLayerIO(arrayOfContainers)
     
     VMImageObject.FreehandLayersXML = FreehandLayerIO.SerializeToString()
@@ -295,8 +297,8 @@ def systemDrawingBitmap2npArray(bitmap):
     pathBitmapTmp = os.path.join(os.path.dirname(os.path.abspath(__file__)),"tmp.png")
     bitmap.Save(pathBitmapTmp)
     npArray = np.array(Image.open(pathBitmapTmp))
-    os.remove(pathBitmapTmp)
 
+    os.remove(pathBitmapTmp)
     bitmap.Dispose()
 
     return npArray

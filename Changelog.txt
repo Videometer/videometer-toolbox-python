@@ -1,0 +1,11 @@
+Version 0.24 --- 2023-11-23
+- Throws error if PixelValues is not the same dimensions as the ImageLayers when saving + unit tests [#3]
+- Added verbose input to hips.write() to turn off the print in console. Now it is defaulted off
+- Minor memory freeing fixes, clean up and additional comments
+
+
+
+
+
+
+

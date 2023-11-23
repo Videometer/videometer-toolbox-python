@@ -252,10 +252,10 @@ class ImageClass:
             
             if len(npArray.shape) == 3:
                 npArray = npArray[:,:,0]
-            npMax = np.max(npArray)
-            if npMax != 0.0:
-                npArray = npArray / np.max(npArray)           
-            
+
+            # Scale down to binary
+            npArray = npArray / np.max([np.max(npArray), 1])
+
             # Add to the freehandLayerDict with the same key as in VideometerLab software
             freehandObject = {
                 "name" : "Layer "+str(container.layerId+1),
@@ -307,6 +307,8 @@ class ImageClass:
         bitmap = converter.GetBitmap(VMImageObject, SpectraNamesLUT[spectraName])
         srgbImage = utils.systemDrawingBitmap2npArray(bitmap).astype(np.uint8)       
         self.RGBPixels = srgbImage
+
+        VMImageObject.Free()
 
         return srgbImage
 
@@ -461,10 +463,12 @@ def write(image, path, compression="SameAsImageClass", verbose=False):
             listOfValid.append("SameAsImageClass")
             raise NotImplementedError(compression + " is not implemented. \nList of valid : " + str(listOfValid)) 
         
+        # CompressionMode on the Compression Preset Object is set to RAW ... which will fail so this is fixed by setting it to None  
         if compression == "Uncompressed":
             bandCompressionMode = None
         else:
             bandCompressionMode = compressionLUT[compression].CompressionParameters.CompressionMode
+
         quantValue = compressionLUT[compression].QuantificationParameters
         bands = imagearr.shape[2]
         quantificationParameters = clr.System.Array.CreateInstance(VMIm.Compression.QuantificationParameters, bands)
@@ -662,24 +666,4 @@ def readOnlyPixelValues(path):
 
     return npArray
 
-
-
-
-if __name__ == "__main__":
-    img = read(r"C:\Users\jmk\Downloads\TestEverythingImage_Original.hips")
-    print(img.FreehandLayers[0]["pixels"])
-    print("-----------------------------------------------")
-
-    path = r"C:\Users\jmk\Downloads\TestEverythingImage_Original_NEW.hips"
-    write(img, path)
-
-    print("-------------------------------")
-    
-    img = read(path)
-    print(img.FreehandLayers[0]["pixels"].shape)
-    # print(img.PixelValues.shape)
-
-    # t = img.FreehandLayers[0]["pixels"]
-    # for i in range(t.shape[-1]):
-    #     print(t[:,:,i])
 

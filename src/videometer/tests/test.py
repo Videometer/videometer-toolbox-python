@@ -50,18 +50,13 @@ class Test02OnImagesRead(unittest.TestCase):
 
     @classmethod
     def setUpClass(self):
-        # if "WritingTest_" in self.imagePath:
-        #     print("bingo", self.imagePath)
-        #     time.sleep(1)
-
         self.ImageClass = hips.read(self.imagePath) 
 
     def test_ImagePixelValues(self):
         self.assertIs(type(self.ImageClass.PixelValues), np.ndarray)
         self.assertEqual(self.ImageClass.PixelValues.shape, (self.ImageClass.Height,self.ImageClass.Width,self.ImageClass.Bands))
-        # WritingTest_TestEverythingImage_VeryHighCompression is twice compressed in the VeryHighCompression configuration 
-        # which results in the pixel values to drift to far
-        # -------------- Is this a problem ??
+        
+        # Lossy compression drifts the values to much when VeryHighCompressionImage is used twice on the same image so we skip it for now
         if self.ImageClass.ImageFileName == "WritingTest_TestEverythingImage_VeryHighCompression.hips":
             return
         self.assertTrue(np.all(np.round(self.ImageClass.PixelValues[:,:,0]) == np.array([[0,1,2],[3,4,5]], dtype=np.float32)))
@@ -273,7 +268,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
 
         self.assertEqual(len(plt_outputs), self.ImageClass.Bands)
 
-        # Same problem here with the VeryHighCompressionImage
+        # Lossy compression drifts the values to much when VeryHighCompressionImage is used twice on the same image so we skip it for now
         if self.ImageClass.ImageFileName == "WritingTest_TestEverythingImage_VeryHighCompression.hips":
             return
         self.assertTrue(np.all(np.round(images[0]) == np.array([[0,1,2],[3,4,5]], dtype=np.float32)))
@@ -294,7 +289,7 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
         self.assertEqual(self.ImageClass.Bands, 19) ##  check if this changed something within the ImageClass
 
 
-        # Same problem here with the VeryHighCompressionImage
+        # Lossy compression drifts the values to much when VeryHighCompressionImage is used twice on the same image so we skip it for now
         if self.ImageClass.ImageFileName == "WritingTest_TestEverythingImage_VeryHighCompression.hips":
             return
         self.assertTrue(np.all(np.round(images[0]) == np.array([[0,1,2],[3,4,5]], dtype=np.float32)))
@@ -334,12 +329,12 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
             for i in range(self.ImageClassReduced.Bands):
                 self.assertTrue(self.ImageClassReduced._QuantificationParametersObject[i].Equals(self.ImageClass._QuantificationParametersObject[bandsIndexesToUse[i]]))
 
-        # Same problem here with the VeryHighCompressionImage
+        # Lossy compression drifts the values to much when VeryHighCompressionImage is used twice on the same image so we skip it for now
         if "VeryHighCompression" in self.ImageClassReduced.ImageFileName:
             return
         self.assertTrue(np.all(np.round(self.ImageClassReduced.PixelValues[:,:,0]) == np.array([[0,1,2],[3,4,5]], dtype=np.float32)))
         self.assertEqual(np.sum(np.round(self.ImageClassReduced.PixelValues), dtype=int), np.sum([1,2,3,4,5])) 
-        
+
 
 
 
