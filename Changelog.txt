@@ -1,3 +1,6 @@
+Version 0.25 --- 2023-11-23
+- Changed the names of vmUtils to vm_utils and setupHelper to setup_helper
+
 Version 0.24 --- 2023-11-23
 - Throws error if PixelValues is not the same dimensions as the ImageLayers when saving + unit tests [#3]
 - Added verbose input to hips.write() to turn off the print in console. Now it is defaulted off

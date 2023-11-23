@@ -6,7 +6,7 @@ path2ipp = os.path.join(VMPATH,"DLLs","IPP2019Update1","intel64")
 # If DLLs are not found 
 if not os.path.isdir(path2ipp):
     print("Attention. \nRequired DLLs were not found. Let me get them for you")
-    from videometer.setupHelper import setupDlls
+    from videometer.setup_helper import setupDlls
     setupDlls()
 
 # Add the path to the IPP files at the front to it will be checked first
@@ -15,7 +15,7 @@ os.environ["PATH"] = path2ipp + ";" + os.environ["PATH"]
 import matplotlib.pyplot as plt
 import numpy as np
 import clr
-from videometer import vmUtils as utils
+from videometer import vm_utils as utils
 
 listOfDlls = ["VM.Image.IO.dll",
               "VM.Image.dll",
