@@ -391,7 +391,7 @@ def read(path, bandIndexesToUse=[], ifSkipReadingAllLayers=False, ifSkipReadingF
     return ImageClass(path, bandIndexesToUse, ifSkipReadingAllLayers, ifSkipReadingFreehandLayer) 
     
 
-def write(image, path, compression="SameAsImageClass"):
+def write(image, path, compression="SameAsImageClass", verbose=False):
     """Writes a HIPS image from an ImageClass object or a NumPy array that
     corresponds to the pixel values of a spectral image.
     
@@ -512,10 +512,12 @@ def write(image, path, compression="SameAsImageClass"):
 
     if os.path.isfile(path):
         fullPath = os.path.abspath(path)
-        print("HIPS image successfully written in " + fullPath)
+        if verbose:
+            print("HIPS image successfully written in " + fullPath)
         return fullPath
     else:
-        print("Failed to write HIPS image")
+        if verbose:
+            print("Failed to write HIPS image")
         return None
 
     

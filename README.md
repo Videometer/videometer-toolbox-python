@@ -82,7 +82,7 @@ img = hips.readOnlyPixelValues("image.hips")
 
 ## Usage - Write
 
-### videometer.hips.write(image, path, compression="SameAsImageClass")  
+### videometer.hips.write(image, path, compression="SameAsImageClass", verbose=False)  
 &emsp;&emsp;  Writes a HIPS image from an ImageClass object or a NumPy array that corresponds  
 &emsp;&emsp; to the pixel values of a spectral image.  
 
