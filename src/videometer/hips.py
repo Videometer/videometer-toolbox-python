@@ -413,6 +413,10 @@ def write(image, path, compression="SameAsImageClass"):
                 "HighCompression" : (see VideometerLab software),
                 "VeryHighCompression" : (see VideometerLab software)
             }
+
+    verbose - bool
+        If true then prints out the name of the file otherwise not
+        Default is false
     
     Outputs : Returns the path if successful otherwise None."""
     
@@ -428,6 +432,24 @@ def write(image, path, compression="SameAsImageClass"):
             compression = "Uncompressed"
     elif(type(image) == ImageClass):
         imagearr = image.PixelValues
+
+        # Check if all Image layers match the size of the image.        
+        h,w,_ = imagearr.shape
+
+        if not (image.CorrectedPixels is None) and (image.CorrectedPixels.shape != (h,w)):
+            raise ValueError("CorrectedPixels "+str(image.CorrectedPixels.shape)+" and PixelValues "+str((h,w))+" shape do not match")
+        if not (image.DeadPixels is None) and  (image.DeadPixels.shape != (h,w)):
+            raise ValueError("DeadPixels "+str(image.DeadPixels.shape)+" and PixelValues "+str((h,w))+" shape do not match")
+        if not (image.ForegroundPixels is None) and  (image.ForegroundPixels.shape != (h,w)):
+            raise ValueError("ForegroundPixels "+str(image.ForegroundPixels.shape)+" and PixelValues "+str((h,w))+" shape do not match")
+        if not (image.SaturatedPixels is None) and  (image.SaturatedPixels.shape != (h,w)):
+            raise ValueError("SaturatedPixels "+str(image.SaturatedPixels.shape)+" and PixelValues "+str((h,w))+" shape do not match")
+        
+        if not (image.FreehandLayers is None): 
+            for i, freehand in enumerate(image.FreehandLayers):
+                if freehand["pixels"].shape != (h,w):
+                    raise ValueError("FreehandLayers "+str(freehand["pixels"].shape)+" at i="+str(i)+" and PixelValues "+str((h,w))+" shape do not match")
+
     else:
         raise TypeError("Image input has to be either ImageClass object or 3-D NumPy array")
     

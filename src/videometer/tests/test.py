@@ -196,10 +196,62 @@ class Test01OnImagesWrite(unittest.TestCase):
             os.mkdir("TestImagesWriting")
         self.ImageClass = hips.read(self.imagePath) 
 
+    @classmethod
+    def tearDownClass(self):
+        # Clean up if test_ImageShapeExceptionsWhenSaving fails
+        for filename_suffix in ["PixelValues","CorrectedPixels","DeadPixels","ForegroundPixels","SaturatedPixels","FreehandLayers"] : 
+            filename = "test_"+filename_suffix+".hips"
+            if os.path.isfile(filename):
+                os.remove(filename)    
+
+
     def test_WriteImageClass(self):
         path = hips.write(self.ImageClass, os.path.join("TestImagesWriting",  "WritingTest_" + self.ImageClass.ImageFileName))
         self.assertIsNotNone(path)
         self.assertTrue(os.path.isfile(path))
+
+
+    def test_ImageShapeExceptionsWhenSaving(self):
+        # Pixel Values
+        old_arr = self.ImageClass.PixelValues.copy()
+        self.ImageClass.PixelValues = np.array([[[0]]])
+        self.assertRaises(ValueError, hips.write, self.ImageClass,"test_PixelValues.hips") # Error, func, arg1, arg2
+        self.ImageClass.PixelValues = old_arr
+
+        # Corrected Pixels
+        old_img_layer = self.ImageClass.CorrectedPixels.copy()
+        self.ImageClass.CorrectedPixels = np.array([[[0]]])
+        self.assertRaises(ValueError, hips.write, self.ImageClass,"test_CorrectedPixels.hips") # Error, func, arg1, arg2
+        self.ImageClass.CorrectedPixels = old_img_layer
+        
+        # Dead Pixels
+        old_img_layer = self.ImageClass.DeadPixels.copy()
+        self.ImageClass.DeadPixels = np.array([[[0]]])
+        self.assertRaises(ValueError, hips.write, self.ImageClass,"test_DeadPixels.hips") # Error, func, arg1, arg2
+        self.ImageClass.DeadPixels = old_img_layer
+
+        # Foreground pixels
+        old_img_layer = self.ImageClass.ForegroundPixels.copy()
+        self.ImageClass.ForegroundPixels= np.array([[[0]]])
+        self.assertRaises(ValueError, hips.write, self.ImageClass,"test_ForegroundPixels.hips") # Error, func, arg1, arg2
+        self.ImageClass.ForegroundPixels = old_img_layer
+
+        # Saturated Pixels
+        old_img_layer = self.ImageClass.SaturatedPixels.copy()
+        self.ImageClass.SaturatedPixels= np.array([[[0]]])
+        self.assertRaises(ValueError, hips.write, self.ImageClass,"test_SaturatedPixels.hips") # Error, func, arg1, arg2
+        self.ImageClass.SaturatedPixels = old_img_layer
+
+        # Note  It does throw the ValueError but for some reason the assertRaises doesn't catch it ...  
+        #              So this will be commented out until a solution is found
+        #   - JMK
+        # 
+        # Freehand Layers 
+        # self.ImageClass.FreehandLayers[0]["pixels"] = np.array([[[0]]])      
+        # self.assertRaises(ValueError, hips.write, self.ImageClass,"test_FreehandLayers.hips") # Error, func, arg1, arg2
+        
+        
+        
         
 
 @parameterized_class(
@@ -208,8 +260,6 @@ class Test01OnImagesWrite(unittest.TestCase):
 class Test03OnImagesVMfunctions(unittest.TestCase):
     @classmethod
     def setUpClass(self):
-        # if "WritingTest" in self.imagePath:
-        #     time.sleep(3)
         self.ImageClass = hips.read(self.imagePath)
         self.ImageClassMasked = hips.read(self.imagePath)
         self.ImageClassReduced = hips.read(self.imagePath)

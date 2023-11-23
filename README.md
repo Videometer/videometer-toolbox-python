@@ -106,6 +106,9 @@ Level of Compression : {
     "VeryHighCompression" : (see VideometerLab software)
 }
 ```
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - **verbose \<Boolean>**:   If true then prints out the name of the file otherwise not.   
+&emsp;&emsp;&emsp;&emsp;&emsp;&emsp; &emsp;&emsp;  Default is false   
+
 &emsp;&emsp; &emsp;&emsp; **Output** :   
 &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; - Returns a full path to the written .HIPS image if successful otherwise None.
 
