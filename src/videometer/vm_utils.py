@@ -4,6 +4,7 @@ import clr, System
 import numbers
 import ctypes
 from PIL import Image
+import random
 
 from System.Runtime.InteropServices import GCHandle, GCHandleType
 
@@ -294,7 +295,7 @@ def systemDrawingBitmap2npArray(bitmap):
     # No System.Drawing.Bitmap to numpy array method was found if it is found please
     # switch it out for this.
 
-    pathBitmapTmp = os.path.join(os.path.dirname(os.path.abspath(__file__)),"tmp.png")
+    pathBitmapTmp = os.path.join(os.path.dirname(os.path.abspath(__file__)),str(random.randint(0,999999999999))+"tmp.png") # rand int is there to make it safe for parallelization
     bitmap.Save(pathBitmapTmp)
     npArray = np.array(Image.open(pathBitmapTmp))
 
