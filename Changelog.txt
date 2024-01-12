@@ -1,11 +1,13 @@
+Version 0.27
+- updated toml file
 
-Version 0.26 -- 2023-12-1
+Version 0.26 
 - Made to_sRGB() function safe to parallelize
 
-Version 0.25 --- 2023-11-23
+Version 0.25 
 - Changed the names of vmUtils to vm_utils and setupHelper to setup_helper
 
-Version 0.24 --- 2023-11-23
+Version 0.24 
 - Throws error if PixelValues is not the same dimensions as the ImageLayers when saving + unit tests [#3]
 - Added verbose input to hips.write() to turn off the print in console. Now it is defaulted off
 - Minor memory freeing fixes, clean up and additional comments
