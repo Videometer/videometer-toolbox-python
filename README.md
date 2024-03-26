@@ -328,7 +328,7 @@ The center of the toolbox.
 
 ## Bugs or suggestions
 
-Suggestions and bug reports may be sent to asc@videometer.com or jmk@videometer.com 
+Suggestions and bug reports may be sent to asc@videometer.com
  
 
 Enjoy!
