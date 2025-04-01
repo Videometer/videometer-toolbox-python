@@ -1,5 +1,7 @@
 # Add path to ipp DLLs in runtime
 import os
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 VMPATH = os.path.dirname(os.path.abspath(__file__))
 path2ipp = os.path.join(VMPATH,"DLLs","IPP2019Update1","intel64")
 

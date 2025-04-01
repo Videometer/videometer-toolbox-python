@@ -1,3 +1,6 @@
+Version 0.28
+- Added "os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"" to hips.py to allow different packages to use their own "libiomp5md.dll".
+
 Version 0.27
 - updated toml file
 
