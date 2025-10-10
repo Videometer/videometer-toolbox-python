@@ -275,7 +275,6 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
         self.assertEqual(np.sum(np.round(images), dtype=int), np.sum([1,2,3,4,5])) 
         self.assertTrue(np.all(titles == np.array(["Band "+str(i+1) for i in range(self.ImageClass.Bands)])))
 
-
     def test_showReduced(self):
         bandIndexesToUse=[0]
         bands = len(bandIndexesToUse)
@@ -416,6 +415,15 @@ class TestHelperFunctions(unittest.TestCase):
         self.assertTrue(np.all(npArr == sysArr2np))
 
 
+    def test_imageToArrayMean(self):
+        path_to_image = os.path.join(testImagesDir, "2DGaussianSideBySide.hips")
+        pixelValues = hips.readOnlyPixelValues(path_to_image)
+
+        mean_method1 = np.mean(pixelValues, axis=(0,1))[0]
+        mean_method2 = np.mean(pixelValues[:,:,0])
+
+        self.assertAlmostEqual(mean_method1, mean_method2)
+
     def test_imageLayer2npArray(self):
         npArr = np.array([[1,0,1],[0,1,0]],dtype=np.float32) 
         img = VMIm.VMImage(utils.asNetArrayMemMove(npArr))
@@ -532,15 +540,9 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertTrue(c in lut)
             self.assertTrue("CompressionParameters" in dir(lut[c]))
             self.assertTrue("QuantificationParameters" in dir(lut[c]))
-        
-
-
 
 if __name__ == "__main__":
     unittest.main()
-
-
-	
 
 
 

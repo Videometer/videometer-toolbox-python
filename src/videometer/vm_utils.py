@@ -85,7 +85,6 @@ def illuminationList2Objects(illuminationList):
         illuminationObjects.append(illuminationLUP[ill])
     
     return np.array(illuminationObjects)
-    
 
 def asNumpyArray(netArray):
     '''
@@ -208,7 +207,7 @@ def vmImage2npArray(vmImage):
     width = vmImage.Width
     bands = vmImage.Bands
 
-    npArray = np.empty((height, width, bands), dtype=np.float32)
+    npArray = np.empty((height, width, bands))
     for b in range(bands):
         bandLayer = VMIm.ImagePixelAccess.GetValues(vmImage, b)
         npArray[:,:,b] = asNumpyArray(bandLayer).reshape(height,width)

@@ -7,4 +7,5 @@ src/videometer/test.py
 src/videometer/testVEnv/
 src/videometer/tests/TestImages/TestImagesWriting/*
 *tmp*
-
+.hypothesis
+myenv/
