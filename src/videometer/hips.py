@@ -286,12 +286,20 @@ class ImageClass:
         
         SpectraNamesLUT = utils.get_SpectraNamesLUP()
         if not (spectraName in SpectraNamesLUT):
-            raise NotImplementedError("spectraName=\"" + spectraName + "\" is not implemented. \nList of implemented spectras: "+str(list(SpectraNamesLUT.keys())))
+            raise NotImplementedError("spectraName=\"" + spectraName + "\" is not implemented. \nList of implemented spectras: "+ str(list(SpectraNamesLUT.keys())))
 
+        
+        # Take only the wavelengths with Diffused_Highpower_LED' illumination
+        diffusedMask = np.array(self.Illumination) == "Diffused_Highpower_LED"
+        
+        
         # Create a new VM object to parse through the SRGBViewTransform with only the visable wavelengths
-        visableBands = (380 <= self.WaveLengths) * (self.WaveLengths <= 780)
+        visableMask = (380 <= self.WaveLengths) * (self.WaveLengths <= 780)
+        
+        visableBands = diffusedMask & visableMask
+    
         if np.sum(visableBands) < 3:
-            raise TypeError("Image class needs to have 3 or more wavelengths on the visable spectrum (380mm <= wavelength <= 780mm). Number of visable wavelength in ImageClass : "+str(np.sum(visableBands)))
+            raise TypeError("Image class needs to have 3 or more wavelengths on the visable spectrum (380mm <= wavelength <= 780mm). Number of visable wavelength in ImageClass : "+ str(np.sum(visableBands)))
         VMImageObject = utils.npArray2VMImage(self.PixelValues[:,:,visableBands])
 
         # Add attributes that are checked in IsValidFor()
