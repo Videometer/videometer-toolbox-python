@@ -288,11 +288,12 @@ class ImageClass:
         if not (spectraName in SpectraNamesLUT):
             raise NotImplementedError("spectraName=\"" + spectraName + "\" is not implemented. \nList of implemented spectras: "+ str(list(SpectraNamesLUT.keys())))
 
+        # Take only the wavelengths with the right illumination
+    
+        allowableIlluminations = ["Diffused_Highpower_LED","Diffused_Lowpower_LED","Direct_Lowpower_LED","Coaxial_FrontLight"]
         
-        # Take only the wavelengths with Diffused_Highpower_LED' illumination
-        diffusedMask = np.array(self.Illumination) == "Diffused_Highpower_LED"
-        
-        
+        diffusedMask = np.isin(self.Illumination, allowableIlluminations)
+    
         # Create a new VM object to parse through the SRGBViewTransform with only the visable wavelengths
         visableMask = (380 <= self.WaveLengths) * (self.WaveLengths <= 780)
         
