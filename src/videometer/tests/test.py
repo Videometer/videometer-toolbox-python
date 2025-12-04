@@ -517,8 +517,7 @@ class TestHelperFunctions(unittest.TestCase):
         vmImgRef.Free()
         vmImg2.Free()
         vmImg3.Free()
-        
-        
+
 
     def test_get_SpectraNamesLUP(self):
         lut = utils.get_SpectraNamesLUP()
@@ -540,6 +539,7 @@ class TestHelperFunctions(unittest.TestCase):
             self.assertTrue(c in lut)
             self.assertTrue("CompressionParameters" in dir(lut[c]))
             self.assertTrue("QuantificationParameters" in dir(lut[c]))
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,3 +1,6 @@
+Version 0.30
+- When displaying in sRGB only use Diffused_Highpower_LED, Diffused_Lowpower_LED, Direct_Lowpower_LED and Coaxial_FrontLight
+
 Version 0.29
 - Changed vmImage2npArray function to not include type but let numpy resolve itself. It was causing different means.
 
