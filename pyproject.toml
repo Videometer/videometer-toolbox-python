@@ -49,4 +49,17 @@ include-package-data = true
 [tool.setuptools.package-data]
 "videometer.tests.TestImages" = ["*.hips"]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-cov"  # Great for checking code coverage
+]
 
+# Pytest Configuration
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = "-ra -q"
+testpaths = [
+    "tests",
+]
+python_files = "test_*.py"

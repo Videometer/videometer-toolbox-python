@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import clr
 import System
 
-VMPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+VMPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../src/videometer"))
 VMDLLPATH = os.path.join(VMPATH, "DLLs", "VM")
 clr.AddReference(os.path.join(VMDLLPATH, "VM.Image.dll"))
 clr.AddReference(os.path.join(VMDLLPATH, "VM.Image.IO.dll"))
@@ -27,7 +27,7 @@ import VM.Image.IO as VMImIO
 # - Need to test the writing with different compressions...
 
 
-testImagesDir = os.path.join(VMPATH, "tests", "TestImages")
+testImagesDir = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "TestImages"))
 os.chdir(testImagesDir)
 
 
