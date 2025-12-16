@@ -4,7 +4,7 @@ import clr, System
 import numbers
 import ctypes
 from PIL import Image
-import random
+import tempfile
 
 from System.Runtime.InteropServices import GCHandle, GCHandleType
 
@@ -324,21 +324,20 @@ def systemDrawingBitmap2npArray(bitmap):
     # input a bitmap and return a numpy array
 
     # Note from devs :
-    # Save bitmap from c# and read it from numpy (honestly not my best idea but works)
+    # Save bitmap from C# and read it from numpy (honestly not my best idea but works)
     # This is done because its quicker and easier easier than changing it to VM Image
-    # and turning that into npArray. Also avoids the problem of reading a RGB Vm Image
+    # and turning that into npArray. Also avoids the problem of reading a RGB VM Image
     # with GetPixelValues().
     # No System.Drawing.Bitmap to numpy array method was found if it is found please
     # switch it out for this.
 
-    pathBitmapTmp = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        str(random.randint(0, 999999999999)) + "tmp.png",
-    )  # rand int is there to make it safe for parallelization
-    bitmap.Save(pathBitmapTmp)
-    npArray = np.array(Image.open(pathBitmapTmp))
+    with tempfile.NamedTemporaryFile(delete_on_close=False) as f:
+        tmp_path = f.name
+        f.close()
+        bitmap.Save(tmp_path)
 
-    os.remove(pathBitmapTmp)
+        npArray = np.array(Image.open(tmp_path))
+
     bitmap.Dispose()
 
     return npArray
