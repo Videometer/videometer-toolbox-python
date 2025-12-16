@@ -1,0 +1,297 @@
+import sqlite3
+import pandas as pd
+import json
+import tempfile
+import os
+from typing import List, Optional, Union
+from videometer.hips import ImageClass
+
+class BlobDatabase:
+    """
+    A read-only interface for a Videometer Blob SQLite database.
+    
+    This class allows fetching blob images, querying IDs based on classifications,
+    and generating Pandas DataFrames containing features and class labels.
+    """
+
+    def __init__(self, db_path: str):
+        """
+        Initialize the connection to the SQLite database and validate the version.
+
+        Args:
+            db_path (str): Path to the .blobdb SQLite file.
+
+        Raises:
+            FileNotFoundError: If the database file does not exist.
+            ValueError: If the database version is not 4 or metadata is missing.
+        """
+        if not os.path.exists(db_path):
+            raise FileNotFoundError(f"Database file not found: {db_path}")
+        
+        # Connect in read-only mode using URI
+        self.db_uri = f"file:{os.path.abspath(db_path)}?mode=ro"
+        
+        # Perform initial version check immediately
+        self._validate_version()
+
+    def _get_connection(self) -> sqlite3.Connection:
+        """Establishes a connection to the SQLite database."""
+        return sqlite3.connect(self.db_uri, uri=True)
+
+    def _validate_version(self):
+        """
+        Checks the 'metadata_t' table to ensure the database version is 6.
+        """
+        query = "SELECT value FROM metadata_t WHERE key = 'version'"
+        
+        try:
+            with self._get_connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(query)
+                row = cursor.fetchone()
+                
+                if row is None:
+                    raise ValueError("Invalid Database: 'version' key not found in metadata_t.")
+                
+                version_value = row[0]
+                
+                # Compare as string since the schema defines value as TEXT
+                if version_value != '6':
+                    raise ValueError(f"Unsupported database version: {version_value}. Expected version 6.")
+                    
+        except sqlite3.OperationalError as e:
+            # Handle cases where metadata_t table might not exist at all
+            raise ValueError(f"Invalid Database: Could not access metadata table. Original error: {e}")
+
+    def get_blob(self, blob_id: str) -> ImageClass:
+        """
+        Extracts the blob image data for a specific blob ID and saves it to a temporary file.
+
+        Args:
+            blob_id (str): The unique UUID string of the blob.
+
+        Returns:
+            str: The file path to the temporary file containing the image bytes.
+        
+        Raises:
+            ValueError: If the blob_id does not exist.
+        """
+        query = "SELECT blob_data FROM blobs_t WHERE blob_id = ?"
+        
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (blob_id,))
+            row = cursor.fetchone()
+
+            if row is None:
+                raise ValueError(f"Blob with ID {blob_id} not found.")
+
+            blob_bytes = row[0]
+
+        # Create a temporary file. 
+        # delete=False is required so the file persists for the caller to use.
+        with tempfile.NamedTemporaryFile(delete_on_close=False, suffix='.hips', mode='wb') as tmp_file:
+            tmp_file.write(blob_bytes)
+            tmp_file.close()
+            img = ImageClass(tmp_file.name)
+            return img
+
+
+    def get_ids_by_reference_class(self, class_name: str) -> List[str]:
+        """
+        Retrieves blob IDs that are assigned to a specific Reference class.
+
+        Args:
+            class_name (str): The name of the reference class.
+
+        Returns:
+            List[str]: A list of blob UUIDs.
+        """
+        return self._get_ids_by_class_type(class_name, "reference")
+
+    def get_ids_by_predicted_class(self, class_name: str) -> List[str]:
+        """
+        Retrieves blob IDs that are assigned to a specific Predicted class.
+
+        Args:
+            class_name (str): The name of the predicted class.
+
+        Returns:
+            List[str]: A list of blob UUIDs.
+        """
+        return self._get_ids_by_class_type(class_name, "prediction")
+
+    def _get_ids_by_class_type(self, class_name: str, map_type: str) -> List[str]:
+        """Helper method to query IDs based on label name and map type."""
+        query = """
+            SELECT b.blob_id
+            FROM blobs_t b
+            JOIN blob_labels_map m ON b.id = m.fk_blob_id
+            JOIN labels_t l ON m.fk_label_id = l.id
+            WHERE l.name = ? AND m.type = ?
+        """
+        with self._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, (class_name, map_type))
+            return [row[0] for row in cursor.fetchall()]
+
+    def get_data_frame(self, ids: Optional[List[str]] = None) -> pd.DataFrame:
+        """
+        Generates a Pandas DataFrame containing blob features and classifications.
+
+        The DataFrame includes:
+        - Blob id
+        - Reference Class
+        - Predicted Class
+        - All available features (columns dynamically named).
+
+        Args:
+            ids (Optional[List[str]]): A list of blob UUIDs to include. 
+                                       If None, all blobs are returned.
+
+        Returns:
+            pd.DataFrame: The constructed DataFrame.
+        """
+        with self._get_connection() as conn:
+            # 1. Fetch Blobs
+            blob_query = "SELECT id, blob_id FROM blobs_t"
+            params = []
+            
+            if ids:
+                placeholders = ','.join('?' for _ in ids)
+                blob_query += f" WHERE blob_id IN ({placeholders})"
+                params = ids
+
+            blobs = pd.read_sql_query(blob_query, conn, params=params)
+            
+            if blobs.empty:
+                return pd.DataFrame(columns=['Blob id', 'Reference Class', 'Predicted Class'])
+
+            # Map internal integer ID to UUID for merging later
+            id_map = dict(zip(blobs['id'], blobs['blob_id']))
+            blob_int_ids = tuple(blobs['id'].tolist())
+            
+            # Handle case where tuple has 1 element for SQL syntax "(x)" vs "(x,)"
+            if len(blob_int_ids) == 1:
+                ids_sql = f"({blob_int_ids[0]})"
+            else:
+                ids_sql = str(blob_int_ids)
+
+            # 2. Fetch Labels (Reference and Predicted)
+            # We pivot these manually or via pandas to ensure one row per blob
+            labels_query = f"""
+                SELECT m.fk_blob_id, m.type, l.name
+                FROM blob_labels_map m
+                JOIN labels_t l ON m.fk_label_id = l.id
+                WHERE m.fk_blob_id IN {ids_sql}
+            """
+            labels_df = pd.read_sql_query(labels_query, conn)
+            
+            # Pivot labels to columns
+            if not labels_df.empty:
+                labels_pivot = labels_df.pivot(index='fk_blob_id', columns='type', values='name')
+                labels_pivot = labels_pivot.rename(columns={
+                    'reference': 'Reference Class', 
+                    'prediction': 'Predicted Class'
+                })
+            else:
+                labels_pivot = pd.DataFrame(columns=['Reference Class', 'Predicted Class'])
+
+            # 3. Fetch Features
+            # We join with classifiers to disambiguate feature names if needed
+            features_query = f"""
+                SELECT 
+                    cf.fk_blob_id,
+                    cf.value,
+                    f.name as feature_name,
+                    c.name as classifier_name
+                FROM calc_features_t cf
+                JOIN features_t f ON cf.fk_feature_id = f.id
+                LEFT JOIN classifiers_t c ON f.fk_classifier_id = c.id
+                WHERE cf.fk_blob_id IN {ids_sql}
+            """
+            features_raw = pd.read_sql_query(features_query, conn)
+
+        # 4. Process Data
+        
+        # Combine Blob Info with Labels
+        blobs.rename(columns={'blob_id': 'Blob id'}, inplace=True)
+        blobs.set_index('id', inplace=True)
+        
+        main_df = blobs.join(labels_pivot, how='left')
+
+        # Process Features
+        if not features_raw.empty:
+            # Create a unique column name for each feature
+            # Logic: If classifier name exists and is not empty, append it. 
+            # Otherwise just use feature name.
+            def make_col_name(row):
+                if row['classifier_name']:
+                    return f"{row['feature_name']} ({row['classifier_name']})"
+                return row['feature_name']
+
+            features_raw['col_name'] = features_raw.apply(make_col_name, axis=1)
+
+            # --- DEDUPLICATION STEP ---
+            # Remove duplicate entries for the same blob and column name
+            # keeping the first occurrence.
+            features_raw.drop_duplicates(subset=['fk_blob_id', 'col_name'], keep='first', inplace=True)
+
+            # Process JSON values if necessary
+            features_raw['parsed_value'] = features_raw['value'].apply(self._parse_feature_value)
+
+            # Pivot features
+            # index=fk_blob_id, columns=col_name, values=parsed_value
+            features_pivot = features_raw.pivot(index='fk_blob_id', columns='col_name', values='parsed_value')
+            
+            # Join features to main DataFrame
+            main_df = main_df.join(features_pivot, how='left')
+
+        # Reset index to drop the internal integer ID and return clean DF
+        main_df.reset_index(drop=True, inplace=True)
+        
+        # Ensure 'Reference Class' and 'Predicted Class' exist even if no data found
+        for col in ['Reference Class', 'Predicted Class']:
+            if col not in main_df.columns:
+                main_df[col] = None
+
+        return main_df
+
+    @staticmethod
+    def _parse_feature_value(value: Union[float, str, int]) -> Union[float, list]:
+        """
+        Parses feature values according to specific rules:
+        1. JSON arrays are 2D, discard outer array.
+        2. If resulting array has 1 element, return as scalar.
+        3. If value is already a scalar (REAL/float), return as is.
+        """
+        # If it's already a number (from REAL column), return it
+        if isinstance(value, (int, float)):
+            return value
+
+        # If it's a string, try to parse as JSON
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+                
+                # Check for the specific "2D array" rule
+                if isinstance(parsed, list):
+                    if len(parsed) > 0 and isinstance(parsed[0], list):
+                        # Discard outer array: [[1,2]] -> [1,2]
+                        # Taking the first element of the outer array as the data
+                        # (Assuming the "outer array" wraps the data row)
+                        inner = parsed[0]
+                    else:
+                        inner = parsed
+
+                    # Check for scalar reduction
+                    if isinstance(inner, list) and len(inner) == 1:
+                        return inner[0]
+                    return inner
+                
+                return parsed
+            except (json.JSONDecodeError, TypeError):
+                # If parsing fails, return original string
+                return value
+        
+        return value
