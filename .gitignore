@@ -9,3 +9,4 @@ src/videometer/tests/TestImages/TestImagesWriting/*
 *tmp*
 .hypothesis
 myenv/
+**/.venv/**
