@@ -61,3 +61,13 @@ def test_get_ids_by_predicted_class():
     # Then the desired blobs are returned
     assert len(ids) == 3
     assert '5b2dc5aa-e52c-488b-8101-c4ce1075ae3a' in ids
+
+def test_dataset():
+    # Given a blob database
+    db = BlobDatabase("TestData/3washers.blobdb")
+
+    ds = db.get_dataset(specific_classes=["Small", "Large", "Double"])
+
+    assert 3 == len(ds)
+    assert 3 == len(ds[0][0].shape)
+

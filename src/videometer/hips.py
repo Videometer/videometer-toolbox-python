@@ -19,6 +19,7 @@ os.environ["PATH"] = path2ipp + ";" + os.environ["PATH"]
 import matplotlib.pyplot as plt
 import numpy as np
 import clr
+import tempfile
 from videometer import vm_utils as utils
 
 listOfDlls = [
@@ -398,6 +399,16 @@ class ImageClass:
         for i, bandIndexToUse in enumerate(bandIndexesToUse):
             tmp[i] = self._QuantificationParametersObject[bandIndexToUse]
         self._QuantificationParametersObject = tmp
+
+    @staticmethod
+    def from_bytes(bytes) -> "ImageClass":
+        # Create a temporary file. 
+        # delete=False is required so the file persists for the caller to use.
+        with tempfile.NamedTemporaryFile(delete_on_close=False, suffix='.hips', mode='wb') as tmp_file:
+            tmp_file.write(bytes)
+            tmp_file.close()
+            img = ImageClass(tmp_file.name)
+            return img
 
 
 # ---------------- Start of functions ----------------

@@ -1,9 +1,8 @@
 import sqlite3
 import pandas as pd
 import json
-import tempfile
 import os
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Tuple, Dict
 from videometer.hips import ImageClass
 
 class BlobDatabase:
@@ -29,7 +28,8 @@ class BlobDatabase:
             raise FileNotFoundError(f"Database file not found: {db_path}")
         
         # Connect in read-only mode using URI
-        self.db_uri = f"file:{os.path.abspath(db_path)}?mode=ro"
+        self.db_path = os.path.abspath(db_path)
+        self.db_uri = f"file:{self.db_path}?mode=ro"
         
         # Perform initial version check immediately
         self._validate_version()
@@ -88,14 +88,7 @@ class BlobDatabase:
 
             blob_bytes = row[0]
 
-        # Create a temporary file. 
-        # delete=False is required so the file persists for the caller to use.
-        with tempfile.NamedTemporaryFile(delete_on_close=False, suffix='.hips', mode='wb') as tmp_file:
-            tmp_file.write(blob_bytes)
-            tmp_file.close()
-            img = ImageClass(tmp_file.name)
-            return img
-
+        return ImageClass.from_bytes(blob_bytes)
 
     def get_ids_by_reference_class(self, class_name: str) -> List[str]:
         """
@@ -295,3 +288,129 @@ class BlobDatabase:
                 return value
         
         return value
+
+    def get_dataset(self, 
+                    target_class_type: str = "reference", 
+                    specific_classes: Optional[List[str]] = None, 
+                    transform=None) -> "BlobDataset":
+        """
+        Factory method that creates a PyTorch Dataset context.
+
+        Args:
+            target_class_type (str): 'Reference' or 'Predicted'.
+            specific_classes (List[str], optional): If provided, only includes blobs 
+                                                    belonging to these class names.
+            transform (callable, optional): Image transforms.
+
+        Returns:
+            BlobDataset: A dataset ready for DataLoader.
+        """
+        # 1. Query to get the IDs and Labels we want to include
+        query = f"""
+            SELECT b.id, l.name
+            FROM blobs_t b
+            JOIN blob_labels_map m ON b.id = m.fk_blob_id
+            JOIN labels_t l ON m.fk_label_id = l.id
+            WHERE m.type = ?
+        """
+        params = [target_class_type]
+
+        if specific_classes:
+            placeholders = ','.join('?' for _ in specific_classes)
+            query += f" AND l.name IN ({placeholders})"
+            params.extend(specific_classes)
+
+        # Execute query on the MAIN thread/process
+        with self._get_connection() as conn:
+            rows = conn.execute(query, params).fetchall()
+
+        if not rows:
+            raise ValueError("No blobs found matching the criteria.")
+
+        # 2. Build the Class <-> Index Mapping
+        # Sort to ensure deterministic index assignment
+        unique_classes = sorted(list(set(r[1] for r in rows)))
+        class_to_idx = {name: i for i, name in enumerate(unique_classes)}
+        idx_to_class = {i: name for name, i in class_to_idx.items()}
+
+        # 3. Construct the list of samples (DB_ID, Label_Index)
+        # This list is passed to the dataset, essentially "freezing" the view.
+        samples = []
+        for db_id, class_name in rows:
+            samples.append((db_id, class_to_idx[class_name]))
+
+        print(f"Created dataset with {len(samples)} samples across {len(unique_classes)} classes.")
+        print(f"Classes: {class_to_idx}")
+
+        return BlobDataset(
+            db_path=self.db_path,
+            samples=samples,
+            class_map=idx_to_class,
+            transform=transform
+        )
+
+
+class BlobDataset:
+    """
+    A lightweight view which can be used as a PyTorch Dataset created by BlobDatabase.
+    It manages its own thread-safe SQLite connection for DataLoader workers.
+    """
+    def __init__(self, db_path: str, samples: List[Tuple[int, int]], 
+                 class_map: Dict[int, str], transform=None):
+        """
+        Args:
+            db_path (str): Path to the database file.
+            samples (List): List of tuples (internal_db_id, label_index).
+            class_map (Dict): Mapping of integer label_index -> class string name.
+            transform (callable): PyTorch transforms.
+        """
+        self.db_path = db_path
+        self.samples = samples
+        self.class_map = class_map
+        self.transform = transform
+        
+        # Connection is lazy-loaded per worker process
+        self.conn = None
+        # We need a URI to open in read-only mode
+        self.db_uri = f"file:{os.path.abspath(db_path)}?mode=ro"
+
+    def _get_connection(self) -> sqlite3.Connection:
+        if self.conn is None:
+            # This runs inside the worker process
+            self.conn = sqlite3.connect(self.db_uri, uri=True)
+        return self.conn
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        db_id, label_idx = self.samples[idx]
+
+        conn = self._get_connection()
+        try:
+            # We use the internal integer ID for fastest lookup
+            cursor = conn.cursor()
+            cursor.execute("SELECT blob_data FROM blobs_t WHERE id = ?", (db_id,))
+            row = cursor.fetchone()
+            
+            if row is None:
+                # Fallback or error handling if ID somehow missing
+                raise ValueError(f"Blob ID {db_id} not found during iteration.")
+                
+            blob_bytes = row[0]
+            
+            image = ImageClass.from_bytes(blob_bytes).to_sRGB()
+
+            if self.transform:
+                image = self.transform(image)
+
+            return image, label_idx
+
+        except Exception as e:
+            # Optional: Add robust error handling for corrupt images
+            raise RuntimeError(f"Error loading sample {idx} (DB ID {db_id}): {e}")
+
+    def __del__(self):
+        """Ensure connection closes when dataset is destroyed."""
+        if self.conn:
+            self.conn.close()
