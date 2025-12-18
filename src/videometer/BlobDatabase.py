@@ -134,9 +134,10 @@ class BlobDatabase:
 
         The DataFrame includes:
         - Blob id
-        - Reference Class
-        - Predicted Class
-        - All available features (columns dynamically named).
+        - Reference Class (comma-separated if multiple)
+        - Predicted Class (comma-separated if multiple)
+        - All available features. Vector features are expanded into multiple columns 
+          (e.g., Feature [0], Feature [1]).
 
         Args:
             ids (Optional[List[str]]): A list of blob UUIDs to include. 
@@ -161,7 +162,6 @@ class BlobDatabase:
                 return pd.DataFrame(columns=['Blob id', 'Reference Class', 'Predicted Class'])
 
             # Map internal integer ID to UUID for merging later
-            id_map = dict(zip(blobs['id'], blobs['blob_id']))
             blob_int_ids = tuple(blobs['id'].tolist())
             
             # Handle case where tuple has 1 element for SQL syntax "(x)" vs "(x,)"
@@ -171,7 +171,7 @@ class BlobDatabase:
                 ids_sql = str(blob_int_ids)
 
             # 2. Fetch Labels (Reference and Predicted)
-            # We pivot these manually or via pandas to ensure one row per blob
+            # We fetch all mappings for these blobs
             labels_query = f"""
                 SELECT m.fk_blob_id, m.type, l.name
                 FROM blob_labels_map m
@@ -180,18 +180,23 @@ class BlobDatabase:
             """
             labels_df = pd.read_sql_query(labels_query, conn)
             
-            # Pivot labels to columns
             if not labels_df.empty:
-                labels_pivot = labels_df.pivot(index='fk_blob_id', columns='type', values='name')
-                labels_pivot = labels_pivot.rename(columns={
-                    'reference': 'Reference Class', 
-                    'prediction': 'Predicted Class'
-                })
+                # Handle multiple labels per blob/type by aggregating them into a string
+                # Group by blob_id and type, then join names with ", "
+                labels_grouped = labels_df.groupby(['fk_blob_id', 'type'])['name'].apply(
+                    lambda x: ', '.join(sorted(x))
+                ).reset_index()
+
+                # Pivot labels to columns
+                labels_pivot = labels_grouped.pivot(index='fk_blob_id', columns='type', values='name')
+                
+                # Rename columns if they exist
+                rename_map = {'reference': 'Reference Class', 'prediction': 'Predicted Class'}
+                labels_pivot = labels_pivot.rename(columns=rename_map)
             else:
                 labels_pivot = pd.DataFrame(columns=['Reference Class', 'Predicted Class'])
 
             # 3. Fetch Features
-            # We join with classifiers to disambiguate feature names if needed
             features_query = f"""
                 SELECT 
                     cf.fk_blob_id,
@@ -215,30 +220,61 @@ class BlobDatabase:
 
         # Process Features
         if not features_raw.empty:
-            # Create a unique column name for each feature
-            # Logic: If classifier name exists and is not empty, append it. 
-            # Otherwise just use feature name.
-            def make_col_name(row):
-                if row['classifier_name']:
-                    return f"{row['feature_name']} ({row['classifier_name']})"
-                return row['feature_name']
+            expanded_rows = []
 
-            features_raw['col_name'] = features_raw.apply(make_col_name, axis=1)
-
-            # --- DEDUPLICATION STEP ---
-            # Remove duplicate entries for the same blob and column name
-            # keeping the first occurrence.
-            features_raw.drop_duplicates(subset=['fk_blob_id', 'col_name'], keep='first', inplace=True)
-
-            # Process JSON values if necessary
+            # Pre-parse values to avoid repeated JSON parsing
             features_raw['parsed_value'] = features_raw['value'].apply(self._parse_feature_value)
 
-            # Pivot features
-            # index=fk_blob_id, columns=col_name, values=parsed_value
-            features_pivot = features_raw.pivot(index='fk_blob_id', columns='col_name', values='parsed_value')
-            
-            # Join features to main DataFrame
-            main_df = main_df.join(features_pivot, how='left')
+            # Iterate over raw features to expand vectors
+            # Note: Explicit iteration is used here to handle the dynamic column naming logic 
+            # based on value types (list vs scalar) which is complex to vectorize cleanly.
+            for _, row in features_raw.iterrows():
+                b_id = row['fk_blob_id']
+                val = row['parsed_value']
+                f_name = row['feature_name']
+                c_name = row['classifier_name']
+                
+                # Helper to format base name
+                base_name = f"{f_name} ({c_name})" if c_name else f_name
+
+                if isinstance(val, list):
+                    # It's a vector feature -> Expand to multiple columns
+                    for i, sub_val in enumerate(val):
+                        # Format: Feature [0] (Classifier)
+                        if c_name:
+                            col_name = f"{f_name} [{i}] ({c_name})"
+                        else:
+                            col_name = f"{f_name} [{i}]"
+                        
+                        expanded_rows.append({
+                            'fk_blob_id': b_id,
+                            'col_name': col_name,
+                            'final_value': sub_val
+                        })
+                else:
+                    # It's a scalar (or len-1 list converted to scalar) -> Keep base name
+                    expanded_rows.append({
+                        'fk_blob_id': b_id,
+                        'col_name': base_name,
+                        'final_value': val
+                    })
+
+            if expanded_rows:
+                # Create a long-format DataFrame from the expanded data
+                features_expanded_df = pd.DataFrame(expanded_rows)
+
+                # Deduplicate: In case of duplicates, keep the first one
+                features_expanded_df.drop_duplicates(subset=['fk_blob_id', 'col_name'], keep='first', inplace=True)
+
+                # Pivot to wide format
+                features_pivot = features_expanded_df.pivot(
+                    index='fk_blob_id', 
+                    columns='col_name', 
+                    values='final_value'
+                )
+                
+                # Join features to main DataFrame
+                main_df = main_df.join(features_pivot, how='left')
 
         # Reset index to drop the internal integer ID and return clean DF
         main_df.reset_index(drop=True, inplace=True)
