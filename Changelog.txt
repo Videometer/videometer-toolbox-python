@@ -1,3 +1,6 @@
+Version 0.31
+- Support for querying blobs from Blob Databases
+
 Version 0.30
 - When displaying in sRGB only use Diffused_Highpower_LED, Diffused_Lowpower_LED, Direct_Lowpower_LED and Coaxial_FrontLight
 

@@ -31,6 +31,7 @@ classifiers = [
 ]
 dependencies=[
     "numpy >= 1.19.1",
+    "pandas",
     "matplotlib >= 3.4.3",
     "pythonnet",
     "parameterized",
