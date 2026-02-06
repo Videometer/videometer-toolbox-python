@@ -238,6 +238,11 @@ class ImageClass:
             getImageLayer(VMImageObject, "DeadPixels")
         )
 
+        # Attempt to load foreground pixels from blob image
+        from VM.Blobs import BlobImage
+        blobImage = BlobImage.CreateFromXmlAndCreateMaskImage(VMImageObject.History, VMImageObject.ImageWidth, VMImageObject.ImageHeight)
+        VMIm.ForegroundPixelsLayerHelperMethods.SetForegroundPixelsImageLayer(VMImageObject, blobImage.MaskImage)
+
         # ForegroundPixels
         self.ForegroundPixels = utils.imageLayer2npArray(
             getImageLayer(VMImageObject, "ForegroundPixels")
@@ -751,6 +756,7 @@ def showRGB(imageClass, ifUseMask=False):
     ax_im = plt.imshow(imrgb)
     plt.title("RGB image")
     plt.axis("off")
+    plt.show()
     return ax_im
 
 
