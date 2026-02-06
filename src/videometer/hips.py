@@ -1,46 +1,45 @@
 # Add path to ipp DLLs in runtime
 import os
+import sys
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 VMPATH = os.path.dirname(os.path.abspath(__file__))
-path2ipp = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
+IPP_PATH = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
+DLL_PATH = r"C:\Users\heh\repos\VMLab\src\VideometerLab\bin\x64\Release\net8.0-windows"
+DLL_PATH = r"C:\Users\heh\repos\VM.Blobs\src\VM.Blobs\bin\x64\Release\net8.0\publish"
 
 # If DLLs are not found
-if not os.path.isdir(path2ipp):
+if not os.path.isdir(IPP_PATH):
     print("Attention. \nRequired DLLs were not found. Let me get them for you")
     from videometer.setup_helper import setupDlls
 
     setupDlls()
 
 # Add the path to the IPP files at the front to it will be checked first
-os.environ["PATH"] = path2ipp + ";" + os.environ["PATH"]
+os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
+sys.path.append(DLL_PATH)
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pythonnet
+# This MUST be called before "import clr"
+pythonnet.load("coreclr", runtime_config=r"C:\Users\heh\repos\VMLab\src\VideometerLab\bin\x64\Release\net8.0-windows\VideometerLab.runtimeconfig.json")
 import clr
 import tempfile
 from videometer import vm_utils as utils
 
-listOfDlls = [
-    "VM.Image.IO.dll",
-    "VM.Image.dll",
-    "VM.FreehandLayerIO.dll",
-    "VM.Image.ViewTransforms.dll",
-]
-
-for dllName in listOfDlls:
-    path2dll = os.path.join(VMPATH, "DLLs", "VM", dllName)
-    if not os.path.isfile(path2dll):
-        raise FileNotFoundError("File not found : " + path2dll)
-    clr.AddReference(path2dll)
-
+clr.AddReference("VM.Blobs")
+clr.AddReference("VM.Image.ViewTransforms")
+clr.AddReference("VM.FreehandLayerIO")
+clr.AddReference("VM.GUI.Image.WinForms")
 
 """import class methods from C#"""
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO
 import VM.FreehandLayer as VMFreehand
 import VM.Image.ViewTransforms as VMImTransForms
+from VM.Blobs import BlobImage as _BlobImage
 
 
 class ImageClass:
@@ -344,7 +343,7 @@ class ImageClass:
             VMImageObject.WaveLengths[i] = float(self.WaveLengths[indexVisableBands[i]])
 
         # Converter initialization and check
-        converter = VMImTransForms.MultiBand.SRGBViewTransform()
+        converter = VMImTransForms.MultiBand.SrgbViewTransform()
         if not converter.IsValidFor(VMImageObject):
             raise TypeError(
                 "VM.Image.NaturalColorConversion.InvalidConversionException: Only reflectance calibrated images are supported"

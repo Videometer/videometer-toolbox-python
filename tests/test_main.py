@@ -15,8 +15,6 @@ import System
 
 VMPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../src/videometer"))
 VMDLLPATH = os.path.join(VMPATH, "DLLs", "VM")
-clr.AddReference(os.path.join(VMDLLPATH, "VM.Image.dll"))
-clr.AddReference(os.path.join(VMDLLPATH, "VM.Image.IO.dll"))
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO
 

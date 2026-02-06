@@ -1,39 +1,42 @@
 import numpy as np
-import os
-import clr, System
+import sys
 import numbers
 import ctypes
 from PIL import Image
 import tempfile
 
+DLL_PATH = r"C:\Users\heh\repos\VMLab\src\VideometerLab\bin\x64\Release\net8.0-windows"
+DLL_PATH = r"C:\Users\heh\repos\VM.Blobs\src\VM.Blobs\bin\x64\Release\net8.0\publish"
+sys.path.append(DLL_PATH)
+
+
+import pythonnet
+# This MUST be called before "import clr"
+pythonnet.load("coreclr")
+import clr, System
+
+clr.AddReference("VM.Blobs")
+clr.AddReference("VM.Image.ViewTransforms")
+clr.AddReference("VM.Image")
+clr.AddReference("VM.Jobs")
+clr.AddReference("VM.FreehandLayerIO")
+
 from System.Runtime.InteropServices import GCHandle, GCHandleType
-
-
-"""Add Dlls to the clr"""
-VMPATH = os.path.dirname(os.path.abspath(__file__))
-listOfDlls = [
-    "VM.Image.dll",
-    "VM.Image.IO.dll",
-    "VM.Illumination.dll",
-    "VM.Image.NaturalColorConversion.dll",
-    "VM.FreehandLayerIO.dll",
-    "VM.Image.Compression.dll",
-]
-
-for dllName in listOfDlls:
-    path2dll = os.path.join(VMPATH, "DLLs", "VM", dllName)
-    if not os.path.isfile(path2dll):
-        raise FileNotFoundError("File not found : " + path2dll)
-    clr.AddReference(path2dll)
-
 
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO
 import VM.Illumination as VMill
-import VM.Image.NaturalColorConversion as VMImNatColorConv
+import VM.Image.ColorConversion as VMImNatColorConv
 import VM.FreehandLayer as VMFreehand
 import VM.Image.Compression as VMImgCompression
 
+from VM.Jobs import Job
+
+def event_handler(sender, exception):
+    print(sender)
+    print(exception)
+
+Job.UnhandledException += event_handler
 
 def imageLayer2npArray(imageLayer):
     if imageLayer is None:
