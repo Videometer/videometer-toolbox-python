@@ -1,45 +1,44 @@
 # Add path to ipp DLLs in runtime
 import os
+import sys
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 VMPATH = os.path.dirname(os.path.abspath(__file__))
-path2ipp = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
+IPP_PATH = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
+DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
 
 # If DLLs are not found
-if not os.path.isdir(path2ipp):
+if not os.path.isdir(IPP_PATH):
     print("Attention. \nRequired DLLs were not found. Let me get them for you")
     from videometer.setup_helper import setupDlls
 
     setupDlls()
 
 # Add the path to the IPP files at the front to it will be checked first
-os.environ["PATH"] = path2ipp + ";" + os.environ["PATH"]
+os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
+sys.path.append(DLL_PATH)
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pythonnet
+# This MUST be called before "import clr"
+pythonnet.load("coreclr")
 import clr
+import tempfile
 from videometer import vm_utils as utils
 
-listOfDlls = [
-    "VM.Image.IO.dll",
-    "VM.Image.dll",
-    "VM.FreehandLayerIO.dll",
-    "VM.Image.ViewTransforms.dll",
-]
-
-for dllName in listOfDlls:
-    path2dll = os.path.join(VMPATH, "DLLs", "VM", dllName)
-    if not os.path.isfile(path2dll):
-        raise FileNotFoundError("File not found : " + path2dll)
-    clr.AddReference(path2dll)
-
+clr.AddReference("VM.Blobs")
+clr.AddReference("VM.Image.ViewTransforms")
+clr.AddReference("VM.FreehandLayerIO")
+clr.AddReference("VM.GUI.Image.WinForms")
 
 """import class methods from C#"""
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO
 import VM.FreehandLayer as VMFreehand
 import VM.Image.ViewTransforms as VMImTransForms
+from VM.Blobs import BlobImage as _BlobImage
 
 
 class ImageClass:
@@ -238,6 +237,14 @@ class ImageClass:
             getImageLayer(VMImageObject, "DeadPixels")
         )
 
+        # Attempt to load foreground pixels from blob image
+        from VM.Blobs import BlobImage
+        try:
+            blobImage = BlobImage.CreateFromXmlAndCreateMaskImage(VMImageObject.History, VMImageObject.ImageWidth, VMImageObject.ImageHeight)
+            VMIm.ForegroundPixelsLayerHelperMethods.SetForegroundPixelsImageLayer(VMImageObject, blobImage.MaskImage)
+        except:
+            pass
+
         # ForegroundPixels
         self.ForegroundPixels = utils.imageLayer2npArray(
             getImageLayer(VMImageObject, "ForegroundPixels")
@@ -343,7 +350,7 @@ class ImageClass:
             VMImageObject.WaveLengths[i] = float(self.WaveLengths[indexVisableBands[i]])
 
         # Converter initialization and check
-        converter = VMImTransForms.MultiBand.SRGBViewTransform()
+        converter = VMImTransForms.MultiBand.SrgbViewTransform()
         if not converter.IsValidFor(VMImageObject):
             raise TypeError(
                 "VM.Image.NaturalColorConversion.InvalidConversionException: Only reflectance calibrated images are supported"
@@ -398,6 +405,16 @@ class ImageClass:
         for i, bandIndexToUse in enumerate(bandIndexesToUse):
             tmp[i] = self._QuantificationParametersObject[bandIndexToUse]
         self._QuantificationParametersObject = tmp
+
+    @staticmethod
+    def from_bytes(bytes) -> "ImageClass":
+        # Create a temporary file. 
+        # delete=False is required so the file persists for the caller to use.
+        with tempfile.NamedTemporaryFile(delete_on_close=False, suffix='.hips', mode='wb') as tmp_file:
+            tmp_file.write(bytes)
+            tmp_file.close()
+            img = ImageClass(tmp_file.name)
+            return img
 
 
 # ---------------- Start of functions ----------------
@@ -741,6 +758,7 @@ def showRGB(imageClass, ifUseMask=False):
     ax_im = plt.imshow(imrgb)
     plt.title("RGB image")
     plt.axis("off")
+    plt.show()
     return ax_im
 
 

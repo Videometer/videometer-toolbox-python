@@ -1,39 +1,45 @@
 import numpy as np
 import os
-import clr, System
+import sys
 import numbers
 import ctypes
 from PIL import Image
 import tempfile
 
-from System.Runtime.InteropServices import GCHandle, GCHandleType
-
-
-"""Add Dlls to the clr"""
 VMPATH = os.path.dirname(os.path.abspath(__file__))
-listOfDlls = [
-    "VM.Image.dll",
-    "VM.Image.IO.dll",
-    "VM.Illumination.dll",
-    "VM.Image.NaturalColorConversion.dll",
-    "VM.FreehandLayerIO.dll",
-    "VM.Image.Compression.dll",
-]
+DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
+sys.path.append(DLL_PATH)
 
-for dllName in listOfDlls:
-    path2dll = os.path.join(VMPATH, "DLLs", "VM", dllName)
-    if not os.path.isfile(path2dll):
-        raise FileNotFoundError("File not found : " + path2dll)
-    clr.AddReference(path2dll)
 
+import pythonnet
+# This MUST be called before "import clr"
+pythonnet.load("coreclr")
+import clr, System
+
+clr.AddReference("VM.Blobs")
+clr.AddReference("VM.Image.ViewTransforms")
+clr.AddReference("VM.Image")
+clr.AddReference("VM.Jobs")
+clr.AddReference("VM.FreehandLayerIO")
+clr.AddReference("VM.Image.NETBitmap")
+
+from System.Runtime.InteropServices import GCHandle, GCHandleType
 
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO
 import VM.Illumination as VMill
-import VM.Image.NaturalColorConversion as VMImNatColorConv
+import VM.Image.ColorConversion as VMImNatColorConv
 import VM.FreehandLayer as VMFreehand
 import VM.Image.Compression as VMImgCompression
+import VM.Image.NETBitmap
 
+from VM.Jobs import Job
+
+def event_handler(sender, exception):
+    print(sender)
+    print(exception)
+
+Job.UnhandledException += event_handler
 
 def imageLayer2npArray(imageLayer):
     if imageLayer is None:
@@ -175,7 +181,7 @@ def addAllAvailableImageLayers(VMImageObject, ImageClass):
 
 def addImageLayer(VMImageObject, npArray, typeOfLayer):
 
-    if VMImageObject.GetType() != VMIm.VMImage:
+    if not isinstance(VMImageObject, VMIm.VMImage):
         raise TypeError("VMImageObject needs to be of VM.Image.VMImage type")
 
     if not typeOfLayer in [
@@ -210,7 +216,7 @@ def setFreehandLayers(VMImageObject, ImageClass):
         pixels = freehandLayer["pixels"].astype(np.float32)
         pixelsVMImage = npArray2VMImage(pixels)
 
-        bitmap = VMImIO.DotNetBitmapIO.GetBitmap(pixelsVMImage)
+        bitmap = VM.Image.NETBitmap.DotNetBitmapIO.GetBitmap(pixelsVMImage)
         stream = clr.System.IO.MemoryStream()
 
         bitmap.Save(stream, clr.System.Drawing.Imaging.ImageFormat.Png)
