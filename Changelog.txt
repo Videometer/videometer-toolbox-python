@@ -1,4 +1,5 @@
-Version 0.31
+Version 1.0.0
+- Package is now based upon .NET 8
 - Support for querying blobs from Blob Databases
 
 Version 0.30

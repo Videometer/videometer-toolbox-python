@@ -1,12 +1,13 @@
 import numpy as np
+import os
 import sys
 import numbers
 import ctypes
 from PIL import Image
 import tempfile
 
-DLL_PATH = r"C:\Users\heh\repos\VMLab\src\VideometerLab\bin\x64\Release\net8.0-windows"
-DLL_PATH = r"C:\Users\heh\repos\VM.Blobs\src\VM.Blobs\bin\x64\Release\net8.0\publish"
+VMPATH = os.path.dirname(os.path.abspath(__file__))
+DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
 sys.path.append(DLL_PATH)
 
 
@@ -20,6 +21,7 @@ clr.AddReference("VM.Image.ViewTransforms")
 clr.AddReference("VM.Image")
 clr.AddReference("VM.Jobs")
 clr.AddReference("VM.FreehandLayerIO")
+clr.AddReference("VM.Image.NETBitmap")
 
 from System.Runtime.InteropServices import GCHandle, GCHandleType
 
@@ -29,6 +31,7 @@ import VM.Illumination as VMill
 import VM.Image.ColorConversion as VMImNatColorConv
 import VM.FreehandLayer as VMFreehand
 import VM.Image.Compression as VMImgCompression
+import VM.Image.NETBitmap
 
 from VM.Jobs import Job
 
@@ -178,7 +181,7 @@ def addAllAvailableImageLayers(VMImageObject, ImageClass):
 
 def addImageLayer(VMImageObject, npArray, typeOfLayer):
 
-    if VMImageObject.GetType() != VMIm.VMImage:
+    if not isinstance(VMImageObject, VMIm.VMImage):
         raise TypeError("VMImageObject needs to be of VM.Image.VMImage type")
 
     if not typeOfLayer in [
@@ -213,7 +216,7 @@ def setFreehandLayers(VMImageObject, ImageClass):
         pixels = freehandLayer["pixels"].astype(np.float32)
         pixelsVMImage = npArray2VMImage(pixels)
 
-        bitmap = VMImIO.DotNetBitmapIO.GetBitmap(pixelsVMImage)
+        bitmap = VM.Image.NETBitmap.DotNetBitmapIO.GetBitmap(pixelsVMImage)
         stream = clr.System.IO.MemoryStream()
 
         bitmap.Save(stream, clr.System.Drawing.Imaging.ImageFormat.Png)

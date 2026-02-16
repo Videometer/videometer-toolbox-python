@@ -6,8 +6,7 @@ os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 VMPATH = os.path.dirname(os.path.abspath(__file__))
 IPP_PATH = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
-DLL_PATH = r"C:\Users\heh\repos\VMLab\src\VideometerLab\bin\x64\Release\net8.0-windows"
-DLL_PATH = r"C:\Users\heh\repos\VM.Blobs\src\VM.Blobs\bin\x64\Release\net8.0\publish"
+DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
 
 # If DLLs are not found
 if not os.path.isdir(IPP_PATH):
@@ -24,7 +23,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pythonnet
 # This MUST be called before "import clr"
-pythonnet.load("coreclr", runtime_config=r"C:\Users\heh\repos\VMLab\src\VideometerLab\bin\x64\Release\net8.0-windows\VideometerLab.runtimeconfig.json")
+pythonnet.load("coreclr")
 import clr
 import tempfile
 from videometer import vm_utils as utils
@@ -240,8 +239,11 @@ class ImageClass:
 
         # Attempt to load foreground pixels from blob image
         from VM.Blobs import BlobImage
-        blobImage = BlobImage.CreateFromXmlAndCreateMaskImage(VMImageObject.History, VMImageObject.ImageWidth, VMImageObject.ImageHeight)
-        VMIm.ForegroundPixelsLayerHelperMethods.SetForegroundPixelsImageLayer(VMImageObject, blobImage.MaskImage)
+        try:
+            blobImage = BlobImage.CreateFromXmlAndCreateMaskImage(VMImageObject.History, VMImageObject.ImageWidth, VMImageObject.ImageHeight)
+            VMIm.ForegroundPixelsLayerHelperMethods.SetForegroundPixelsImageLayer(VMImageObject, blobImage.MaskImage)
+        except:
+            pass
 
         # ForegroundPixels
         self.ForegroundPixels = utils.imageLayer2npArray(
