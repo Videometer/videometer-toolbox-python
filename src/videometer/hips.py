@@ -303,7 +303,7 @@ class ImageClass:
 
         self.FreehandLayers = freehandLayerList
 
-    def to_sRGB(self, spectraName="D65"):
+    def to_sRGB(self, spectraName="D65", useMask=False):
         """Performs conversion of the spectral image to sRGB image.
 
         Parameters:
@@ -311,6 +311,8 @@ class ImageClass:
         spectraName - string
             Name of the spectra to be used in the sRGB conversion. Default
             spectraName is 'D65'.
+        useMask - boool
+            Whether to apply the foreground mask
         Output :
             returns the sRGB image and updates the "RGBPixels" attribute"""
 
@@ -335,20 +337,20 @@ class ImageClass:
         diffusedMask = np.isin(self.Illumination, allowableIlluminations)
 
         # Create a new VM object to parse through the SRGBViewTransform with only the visable wavelengths
-        visableMask = (380 <= self.WaveLengths) * (self.WaveLengths <= 780)
+        visibleMask = (380 <= self.WaveLengths) * (self.WaveLengths <= 780)
 
-        visableBands = diffusedMask & visableMask
+        visibleBands = diffusedMask & visibleMask
 
-        if np.sum(visableBands) < 3:
+        if np.sum(visibleBands) < 3:
             raise TypeError(
                 "Image class needs to have 3 or more wavelengths on the visable spectrum (380mm <= wavelength <= 780mm). Number of visable wavelength in ImageClass : "
-                + str(np.sum(visableBands))
+                + str(np.sum(visibleBands))
             )
-        VMImageObject = utils.npArray2VMImage(self.PixelValues[:, :, visableBands])
+        VMImageObject = utils.npArray2VMImage(self.PixelValues[:, :, visibleBands])
 
         # Add attributes that are checked in IsValidFor()
         VMImageObject.AddToHistory(self.History)
-        indexVisableBands = np.where(visableBands)[0]
+        indexVisableBands = np.where(visibleBands)[0]
         for i in range(len(indexVisableBands)):
             VMImageObject.WaveLengths[i] = float(self.WaveLengths[indexVisableBands[i]])
 
@@ -362,7 +364,19 @@ class ImageClass:
         # Convert to sRGB image
         bitmap = converter.GetBitmap(VMImageObject, SpectraNamesLUT[spectraName])
         srgbImage = utils.systemDrawingBitmap2npArray(bitmap).astype(np.uint8)
-        self.RGBPixels = srgbImage
+
+        imrgb = np.empty_like(srgbImage)
+        if useMask:
+            if self.ForegroundPixels is None:
+                raise AttributeError("ForegroundPixels attribute not set")
+
+            for i in range(3):
+                imrgb[:, :, i] = np.multiply(
+                    srgbImage[:, :, i], self.ForegroundPixels
+                )
+        else:
+            imrgb = srgbImage
+        self.RGBPixels = imrgb
 
         VMImageObject.Free()
 
@@ -715,7 +729,7 @@ def show(image, ifUseMask=False, bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
     return plt_outputs
 
 
-def showRGB(imageClass, ifUseMask=False):
+def showRGB(img, ifUseMask=False):
     """Function that shows srgb representation of the image. If ifUseForegroundMask is
         set to true then the image will be shown masked.
 
@@ -735,30 +749,13 @@ def showRGB(imageClass, ifUseMask=False):
         it is excluded from documentation. The same will apply for the remaining
         show functions."""
 
-    if type(imageClass) != ImageClass:
+    if type(img) != ImageClass:
         raise TypeError("imageClass needs to be a ImageClass object")
 
-    # This is a problematic statement
-    # if the user calls it > changes the images > calls it again
-    # then it will display the old image ....
-    if imageClass.RGBPixels is None:
-        imageClass.to_sRGB()
-    image_arr = imageClass.RGBPixels
-
-    imrgb = np.empty_like(image_arr)
-    if ifUseMask:
-        if imageClass.ForegroundPixels is None:
-            raise AttributeError("ForegroundPixels attribute not set")
-
-        for i in range(3):
-            imrgb[:, :, i] = np.multiply(
-                image_arr[:, :, i], imageClass.ForegroundPixels
-            )
-    else:
-        imrgb = image_arr
+    img.to_sRGB(useMask=ifUseMask)
 
     plt.figure(num=1)
-    ax_im = plt.imshow(imrgb)
+    ax_im = plt.imshow(img.RGBPixels)
     plt.title("RGB image")
     plt.axis("off")
     plt.show()

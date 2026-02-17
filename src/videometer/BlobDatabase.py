@@ -435,7 +435,7 @@ class BlobDataset:
                 
             blob_bytes = row[0]
             
-            image = ImageClass.from_bytes(blob_bytes).to_sRGB()
+            image = ImageClass.from_bytes(blob_bytes).to_sRGB(useMask=True)
 
             if self.transform:
                 image = self.transform(image)
