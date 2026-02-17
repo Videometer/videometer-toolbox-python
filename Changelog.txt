@@ -1,3 +1,6 @@
+Version 1.0.2
+- Fixed sRGB images not being generated with foreground mask
+
 Version 1.0.1
 - Fixed issue with using package from Jupyter notebooks when DLLs had to be loaded
 
