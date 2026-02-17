@@ -17,11 +17,12 @@ pythonnet.load("coreclr")
 import clr, System
 
 clr.AddReference("VM.Blobs")
+clr.AddReference("VM.FreehandLayerIO")
+clr.AddReference("VM.GUI.Image.WinForms")
+clr.AddReference("VM.Image.NETBitmap")
 clr.AddReference("VM.Image.ViewTransforms")
 clr.AddReference("VM.Image")
 clr.AddReference("VM.Jobs")
-clr.AddReference("VM.FreehandLayerIO")
-clr.AddReference("VM.Image.NETBitmap")
 
 from System.Runtime.InteropServices import GCHandle, GCHandleType
 
@@ -31,7 +32,6 @@ import VM.Illumination as VMill
 import VM.Image.ColorConversion as VMImNatColorConv
 import VM.FreehandLayer as VMFreehand
 import VM.Image.Compression as VMImgCompression
-import VM.Image.NETBitmap
 
 from VM.Jobs import Job
 
@@ -216,6 +216,7 @@ def setFreehandLayers(VMImageObject, ImageClass):
         pixels = freehandLayer["pixels"].astype(np.float32)
         pixelsVMImage = npArray2VMImage(pixels)
 
+        import VM.Image.NETBitmap
         bitmap = VM.Image.NETBitmap.DotNetBitmapIO.GetBitmap(pixelsVMImage)
         stream = clr.System.IO.MemoryStream()
 

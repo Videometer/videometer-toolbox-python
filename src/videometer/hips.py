@@ -29,9 +29,12 @@ import tempfile
 from videometer import vm_utils as utils
 
 clr.AddReference("VM.Blobs")
-clr.AddReference("VM.Image.ViewTransforms")
 clr.AddReference("VM.FreehandLayerIO")
 clr.AddReference("VM.GUI.Image.WinForms")
+clr.AddReference("VM.Image.NETBitmap")
+clr.AddReference("VM.Image.ViewTransforms")
+clr.AddReference("VM.Image")
+clr.AddReference("VM.Jobs")
 
 """import class methods from C#"""
 import VM.Image as VMIm
