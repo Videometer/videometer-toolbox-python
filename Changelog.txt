@@ -1,3 +1,6 @@
+Version 1.0.1
+- Fixed issue with using package from Jupyter notebooks when DLLs had to be loaded
+
 Version 1.0.0
 - Package is now based upon .NET 8
 - Support for querying blobs from Blob Databases
