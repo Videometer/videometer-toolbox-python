@@ -380,7 +380,7 @@ class ImageClass:
 
         VMImageObject.Free()
 
-        return srgbImage
+        return imrgb
 
     def reduceBands(self, bandIndexesToUse):
         """Reduces bands of the image.
