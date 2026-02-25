@@ -328,7 +328,7 @@ class BlobDatabase:
     def get_dataset(self, 
                     target_class_type: str = "reference", 
                     specific_classes: Optional[List[str]] = None, 
-                    transform=None) -> "BlobDataset":
+                    transform=None,remove_duplicate_ids: Optional[bool] = False) -> "BlobDataset":
         """
         Factory method that creates a PyTorch Dataset context.
 
@@ -337,6 +337,7 @@ class BlobDatabase:
             specific_classes (List[str], optional): If provided, only includes blobs 
                                                     belonging to these class names.
             transform (callable, optional): Image transforms.
+            remove_duplicate_ids (bool): If True, removes duplicate blob IDs from the dataset
 
         Returns:
             BlobDataset: A dataset ready for DataLoader.
@@ -374,6 +375,16 @@ class BlobDatabase:
         samples = []
         for db_id, class_name in rows:
             samples.append((db_id, class_to_idx[class_name]))
+
+        # remove duplicate IDs if requested (e.g., if a blob has multiple labels, we only want one entry)
+        if remove_duplicate_ids:
+            seen_ids = set()
+            unique_samples = []
+            for db_id, label_idx in samples:
+                if db_id not in seen_ids:
+                    unique_samples.append((db_id, label_idx))
+                    seen_ids.add(db_id)
+            samples = unique_samples
 
         print(f"Created dataset with {len(samples)} samples across {len(unique_classes)} classes.")
         print(f"Classes: {class_to_idx}")
