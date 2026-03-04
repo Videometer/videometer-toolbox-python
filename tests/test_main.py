@@ -548,6 +548,52 @@ class TestWriting(unittest.TestCase):
         self.assertTrue(np.all(arr == a.PixelValues))
         ## The rest should be none and zeros .. don't really need to test for that
 
+    def test_write_compressed(self):
+        # Given a image defined with certain pixels and saved with compression
+        arr = np.zeros((2, 3, 19), dtype=np.float32)
+        arr[:, :, 0] = np.array([[0, 1, 2], [3, 4, 5]], dtype=np.float32)
+
+        path = hips.write(
+            arr, os.path.join("TestImagesWriting", "writing_compressed.hips"),
+            compression="VeryHighCompression"
+        )
+        self.assertIsNotNone(path)
+        self.assertTrue(os.path.isfile(path))
+
+        # When it is read back and the pixels are altered
+        second_read = hips.read(path)
+        self.assertTrue(np.all(arr == second_read.PixelValues))
+
+        second_read.PixelValues[:, :, 0] = np.array([[6, 7, 8], [9, 10, 11]])
+        altered = second_read.PixelValues
+
+        # Then the image can still be saved with compression and read
+        hips.write(
+            second_read, path,
+            compression="VeryHighCompression"
+        )
+
+        second_read = hips.read(path)
+        self.assertTrue(np.all(altered == second_read.PixelValues))
+
+    @unittest.skip("Partial")
+    def test_write_cropped(self):
+        img = hips.read("image.hips")
+        arr = img.PixelValues
+
+        hips.write(
+            img, os.path.join("TestImagesWriting", "recompressed.hips"),
+            compression="SameAsImageClass"
+        )
+
+        cropped = arr[750:-750,:].copy()
+        img.PixelValues = cropped
+
+        hips.write(
+            cropped, os.path.join("TestImagesWriting", "recompressed_cropped.hips"),
+            compression="SameAsImageClass"
+        )
+
 
 class TestVMfunctions(unittest.TestCase):
     @classmethod
