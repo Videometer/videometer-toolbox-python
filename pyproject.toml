@@ -38,6 +38,8 @@ dependencies=[
     "parameterized",
     "requests"]
 
+[project.scripts]
+hips-inspect = "videometer.hips_core:main"
 
 [project.urls]
 Homepage = "https://videometer.com"
