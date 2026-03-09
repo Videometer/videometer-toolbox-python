@@ -357,7 +357,9 @@ class HipsImage:
         f.write(binary_data)
         
     def __str__(self) -> str:
-        """Returns a string summary of the HIPS image."""
+        """Returns a string summary of the HIPS image (truncated history/description)."""
+        hist_short = self.history.replace('\n', ' ')[:100]
+        desc_short = self.description.replace('\n', ' ')[:100]
         lines = [
             f"HIPS Image Summary:",
             f"  Dimensions: {self.width}x{self.height} pixels",
@@ -365,8 +367,8 @@ class HipsImage:
             f"  Format: {self.format.name} ({int(self.format)})",
             f"  MmPixel: {self.mm_pixel:.6f}",
             f"  ROI: {self.roi_width}x{self.roi_height} at ({self.roi_x}, {self.roi_y})",
-            f"  History: {self.history[:100]}..." if len(self.history) > 100 else f"  History: {self.history}",
-            f"  Description: {self.description[:100]}..." if len(self.description) > 100 else f"  Description: {self.description}",
+            f"  History: {hist_short}..." if len(self.history) > 100 else f"  History: {self.history}",
+            f"  Description: {desc_short}..." if len(self.description) > 100 else f"  Description: {self.description}",
         ]
         
         if len(self.wavelengths) > 0:
@@ -389,7 +391,8 @@ def main():
     
     parser = argparse.ArgumentParser(description="Inspect HIPS file header information.")
     parser.add_argument("path", help="Path to the .hips file")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Show all extended parameters")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Show all parameters and full history")
+    parser.add_argument("--history", action="store_true", help="Show full history and description")
     
     args = parser.parse_args()
     
@@ -399,24 +402,42 @@ def main():
         
     try:
         img = HipsImage.read_header(args.path)
-        print(img)
         
-        if args.verbose:
-            print("\nExtended Parameters:")
-            if img.band_names:
-                print(f"  Band Names: {img.band_names}")
-            if len(img.strobe_times) > 0:
-                print(f"  Strobe Times: {img.strobe_times.tolist()}")
-            if len(img.illumination) > 0:
-                print(f"  Illumination: {img.illumination.tolist()}")
-            if img.extra_data_int:
-                print(f"  Extra Data (Int): {img.extra_data_int}")
-            if img.extra_data_string:
-                print(f"  Extra Data (String): {img.extra_data_string}")
-            if img.camera_temperature != 0.0:
-                print(f"  Camera Temperature: {img.camera_temperature}")
-            if img.freehand_layers_xml:
-                print(f"  Freehand Layers XML: {len(img.freehand_layers_xml)} bytes")
+        if args.verbose or args.history:
+            # Print full info
+            print(f"HIPS Image: {args.path}")
+            print(f"  Dimensions: {img.width}x{img.height} pixels")
+            print(f"  Bands: {img.bands}")
+            print(f"  Format: {img.format.name} ({int(img.format)})")
+            print(f"  MmPixel: {img.mm_pixel:.6f}")
+            print(f"  ROI: {img.roi_width}x{img.roi_height} at ({img.roi_x}, {img.roi_y})")
+            print(f"\n--- History ---\n{img.history}")
+            print(f"\n--- Description ---\n{img.description}")
+            
+            if args.verbose:
+                print("\n--- Extended Parameters ---")
+                if len(img.wavelengths) > 0:
+                    print(f"  Wavelengths: {img.wavelengths.tolist()}")
+                if img.band_names:
+                    print(f"  Band Names: {img.band_names}")
+                if len(img.strobe_times) > 0:
+                    print(f"  Strobe Times: {img.strobe_times.tolist()}")
+                if len(img.illumination) > 0:
+                    print(f"  Illumination: {img.illumination.tolist()}")
+                if img.extra_data:
+                    print(f"  Extra Data: {img.extra_data}")
+                if img.extra_data_int:
+                    print(f"  Extra Data (Int): {img.extra_data_int}")
+                if img.extra_data_string:
+                    print(f"  Extra Data (String): {img.extra_data_string}")
+                if img.camera_temperature != 0.0:
+                    print(f"  Camera Temperature: {img.camera_temperature}")
+                if img.id:
+                    print(f"  ID: {img.id}")
+                if img.freehand_layers_xml:
+                    print(f"  Freehand Layers XML: {len(img.freehand_layers_xml)} bytes")
+        else:
+            print(img)
                 
     except Exception as e:
         print(f"Error reading HIPS file: {e}")
