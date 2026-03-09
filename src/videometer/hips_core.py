@@ -227,15 +227,7 @@ class HipsImage:
         import io
         from PIL import Image
         
-        # 1. Read size table
-        is_rgb = (self.format & 0x7F) == HipsFormat.PFRGB
-        num_chunks = 1 if is_rgb else self.bands
-        
-        size_table = []
-        for _ in range(num_chunks):
-            size_table.append(struct.unpack('<I', f.read(4))[0])
-            
-        # 2. Determine target dtype
+        # Determine target dtype
         if self._quantization_parameters:
             target_dtype = np.float32
         else:
@@ -253,27 +245,38 @@ class HipsImage:
 
         self._pixels = np.zeros((self.height, self.width, self.bands), dtype=target_dtype)
         
-        # 3. Process each band chunk
-        for b in range(num_chunks):
-            chunk_size = size_table[b]
+        is_rgb = (self.format & 0x7F) == HipsFormat.PFRGB
+        
+        # In HIPS chunked formats (256, 512, 513), chunks are interleaved: [Size][Data][Size][Data]
+        for b in range(self.bands):
+            size_data = f.read(4)
+            if not size_data:
+                break
+            chunk_size = struct.unpack('<I', size_data)[0]
             compressed_data = f.read(chunk_size)
+            
+            # if b == 0:
+            #    print(f"DEBUG: Chunk 0 size={chunk_size}, hex={compressed_data[:16].hex(' ')}")
             
             if is_gz:
                 decompressed_data = gzip.decompress(compressed_data)
                 if is_rgb:
                     temp_pixels = np.frombuffer(decompressed_data, dtype=np.uint8).reshape(self.height, self.width, 3)
                     self._pixels[:, :, :3] = temp_pixels
-                    continue
+                    break # PFRGB is 1 chunk
                 else:
                     decompressed_band = np.frombuffer(decompressed_data, 
                                                      dtype=np.uint8 if self._quantization_parameters else target_dtype).reshape(self.height, self.width)
             elif is_png or is_jpg:
+                # Pillow can handle PNG and JPEG from bytes
                 with Image.open(io.BytesIO(compressed_data)) as img:
                     decompressed_band = np.array(img)
                     if is_rgb and len(decompressed_band.shape) == 3:
+                        # Interleaved RGB
                         self._pixels[:, :, :3] = decompressed_band
-                        continue
+                        break # 1 chunk
             else:
+                # RAW but quantified
                 stored_dtype = np.uint8
                 if self._quantization_parameters:
                     stored_dtype = np.uint8 if self._quantization_parameters[b].Q <= 8 else np.int16
@@ -285,6 +288,9 @@ class HipsImage:
                 factor = (q_params.Q_Max - q_params.Q_Min) / max_q
                 self._pixels[:, :, b] = decompressed_band.astype(np.float32) * factor + q_params.Q_Min
             else:
+                # Handle potential (H, W, 1) from Pillow
+                if len(decompressed_band.shape) == 3 and decompressed_band.shape[2] == 1:
+                    decompressed_band = decompressed_band.reshape(self.height, self.width)
                 self._pixels[:, :, b] = decompressed_band.astype(target_dtype)
 
     def _load_raw_pixels(self, f):
@@ -593,25 +599,17 @@ class HipsImage:
             self._write_to_handle(f)
             
             if is_chunked:
-                size_table_pos = f.tell()
-                f.write(b'\0' * (self.bands * 4))
-                
-                chunk_sizes = []
                 for b in range(self.bands):
                     band_data = self._pixels[:, :, b]
                     if is_quantized:
                         band_data = self._quantize_band(band_data, self._quantization_parameters[b])
                     
                     encoded_bytes = encoder.encode_band(band_data)
-                    chunk_sizes.append(len(encoded_bytes))
+                    # Interleaved: write size, then data
+                    f.write(struct.pack('<I', len(encoded_bytes)))
                     f.write(encoded_bytes)
-                    
-                final_pos = f.tell()
-                f.seek(size_table_pos)
-                for size in chunk_sizes:
-                    f.write(struct.pack('<I', size))
-                f.seek(final_pos)
             else:
+                # RAW
                 for b in range(self.bands):
                     band_data = self._pixels[:, :, b]
                     if is_quantized:
