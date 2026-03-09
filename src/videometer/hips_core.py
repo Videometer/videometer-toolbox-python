@@ -1,6 +1,7 @@
 import os
 import struct
 import numpy as np
+import xml.etree.ElementTree as ET
 from typing import List, Dict, Any, Optional, Union
 from enum import IntEnum
 from dataclasses import dataclass, field
@@ -30,10 +31,17 @@ class HipsFormat(IntEnum):
     PFSHORT_PNG = 0x200 + 1
 
 @dataclass
+class QuantificationParameters:
+    """Parameters for de-quantizing image data."""
+    Q: int = 8
+    Q_Min: float = 0.0
+    Q_Max: float = 1.0
+
+@dataclass
 class HipsImage:
     """
-    Pure Python implementation of the HIPS image format header.
-    Contains metadata and methods to read/write HIPS headers.
+    Pure Python implementation of the HIPS image format header and data.
+    Contains metadata and methods to read/write HIPS files.
     """
     width: int = 0
     height: int = 0
@@ -65,8 +73,152 @@ class HipsImage:
     drawing_primitive_xml: str = ""
     id: str = ""
     
-    # internal offset tracking
+    # Quantification
+    _quantization_parameters: Optional[List[QuantificationParameters]] = None
+    _original_format: Optional[int] = None
+
+    # Internal state
     _data_offset: int = 0
+    _pixels: Optional[np.ndarray] = None
+    _path: Optional[str] = None
+
+    @property
+    def pixels(self) -> np.ndarray:
+        """Access the pixel data as a 3D numpy array (height, width, bands)."""
+        if self._pixels is None:
+            self.load_pixels()
+        return self._pixels
+
+    def load_pixels(self):
+        """Loads the pixel data from the file."""
+        if not self._path:
+            raise ValueError("No file path associated with this HipsImage.")
+            
+        with open(self._path, 'rb') as f:
+            f.seek(self._data_offset)
+            
+            # Identify compression
+            is_gz = bool(self.format & 0x80)
+            is_jpg = bool(self.format & 0x100)
+            is_png = bool(self.format & 0x200)
+            is_compressed = is_gz or is_jpg or is_png
+            
+            if not is_compressed and self._quantization_parameters is None:
+                self._load_raw_pixels(f)
+            else:
+                self._load_compressed_or_quantified_pixels(f, is_gz, is_jpg, is_png)
+
+    def _load_compressed_or_quantified_pixels(self, f, is_gz, is_jpg, is_png):
+        """Handles chunked compressed data and de-quantization."""
+        import gzip
+        import io
+        from PIL import Image
+        
+        # 1. Read size table
+        # For PFRGB, there might be only 1 chunk even if bands=3
+        is_rgb = (self.format & 0x7F) == HipsFormat.PFRGB
+        num_chunks = 1 if is_rgb else self.bands
+        
+        size_table = []
+        for _ in range(num_chunks):
+            size_table.append(struct.unpack('<I', f.read(4))[0])
+            
+        # 2. Determine target dtype
+        if self._quantization_parameters:
+            target_dtype = np.float32
+        else:
+            actual_format = (self._original_format if self._original_format is not None 
+                             else (self.format & 0x7F))
+            dtype_map = {
+                HipsFormat.PFBYTE: np.uint8,
+                HipsFormat.PFSHORT: np.int16,
+                HipsFormat.PFINT: np.int32,
+                HipsFormat.PFFLOAT: np.float32,
+                HipsFormat.PFDOUBLE: np.float64,
+                HipsFormat.PFRGB: np.uint8,
+            }
+            target_dtype = dtype_map.get(actual_format, np.uint8)
+
+        self._pixels = np.zeros((self.height, self.width, self.bands), dtype=target_dtype)
+        
+        # 3. Process each band chunk
+        for b in range(num_chunks):
+            chunk_size = size_table[b]
+            compressed_data = f.read(chunk_size)
+            
+            if is_gz:
+                decompressed_data = gzip.decompress(compressed_data)
+                if is_rgb:
+                    # Interleaved RGB: (H, W, 3)
+                    temp_pixels = np.frombuffer(decompressed_data, dtype=np.uint8).reshape(self.height, self.width, 3)
+                    self._pixels[:, :, :3] = temp_pixels
+                    continue
+                else:
+                    decompressed_band = np.frombuffer(decompressed_data, 
+                                                     dtype=np.uint8 if self._quantization_parameters else target_dtype).reshape(self.height, self.width)
+            elif is_png or is_jpg:
+                with Image.open(io.BytesIO(compressed_data)) as img:
+                    decompressed_band = np.array(img)
+                    if is_rgb and len(decompressed_band.shape) == 3:
+                        # Interleaved RGB
+                        self._pixels[:, :, :3] = decompressed_band
+                        continue
+            else:
+                # RAW but quantified
+                stored_dtype = np.uint8
+                if self._quantization_parameters:
+                    stored_dtype = np.uint8 if self._quantization_parameters[b].Q <= 8 else np.int16
+                decompressed_band = np.frombuffer(compressed_data, dtype=stored_dtype).reshape(self.height, self.width)
+                
+            if self._quantization_parameters:
+                q_params = self._quantization_parameters[b]
+                max_q = float(2**q_params.Q - 1)
+                factor = (q_params.Q_Max - q_params.Q_Min) / max_q
+                self._pixels[:, :, b] = decompressed_band.astype(np.float32) * factor + q_params.Q_Min
+            else:
+                self._pixels[:, :, b] = decompressed_band.astype(target_dtype)
+
+    def _load_raw_pixels(self, f):
+        """Reads uncompressed band-sequential pixel data."""
+        # Map HipsFormat to numpy dtype
+        dtype_map = {
+            HipsFormat.PFBYTE: np.uint8,
+            HipsFormat.PFSHORT: np.int16,
+            HipsFormat.PFINT: np.int32,
+            HipsFormat.PFFLOAT: np.float32,
+            HipsFormat.PFDOUBLE: np.float64,
+            HipsFormat.PFRGB: np.uint8,
+        }
+        
+        actual_format = self.format & 0x7F
+        dtype = dtype_map.get(actual_format, np.uint8)
+        element_size = np.dtype(dtype).itemsize
+        
+        if actual_format == HipsFormat.PFRGB:
+            # PFRGB is usually interleaved RGB: 3 bytes per pixel
+            pixel_size = 3 * element_size
+            total_size = self.width * self.height * pixel_size
+            data = f.read(total_size)
+            if len(data) < total_size:
+                raise EOFError("Unexpected end of file while reading RGB data")
+            # Reshape to (H, W, 3)
+            self._pixels = np.frombuffer(data, dtype=dtype).reshape(self.height, self.width, 3)
+        else:
+            band_size = self.width * self.height * element_size
+            self._pixels = np.zeros((self.height, self.width, self.bands), dtype=dtype)
+            
+            for b in range(self.bands):
+                data = f.read(band_size)
+                if len(data) < band_size:
+                    raise EOFError(f"Unexpected end of file while reading band {b}")
+                self._pixels[:, :, b] = np.frombuffer(data, dtype=dtype).reshape(self.height, self.width)
+
+    @classmethod
+    def read(cls, path: str) -> 'HipsImage':
+        """Reads a HIPS file (header and prepares for lazy pixel loading)."""
+        img = cls.read_header(path)
+        img._path = path
+        return img
 
     @classmethod
     def read_header(cls, path: str) -> 'HipsImage':
@@ -229,6 +381,27 @@ class HipsImage:
             self.extra_data_int[name[len("ExtraDataInt_"):]] = int(val)
         elif name.startswith("ExtraDataString_"):
             self.extra_data_string[name[len("ExtraDataString_"):]] = val
+        elif name == "BandQuantification":
+            # Parse XML for QuantificationParameters
+            try:
+                root = ET.fromstring(val)
+                params = []
+                for qp_node in root.findall('QuantificationParameters'):
+                    qp = QuantificationParameters(
+                        Q=int(qp_node.find('Q').text),
+                        Q_Min=float(qp_node.find('Q_Min').text),
+                        Q_Max=float(qp_node.find('Q_Max').text)
+                    )
+                    params.append(qp)
+                self._quantization_parameters = params
+            except Exception as e:
+                # Fallback or log error
+                pass
+        elif name == "OriginalFormat":
+            # Map string to format integer if possible
+            # e.g., "BytePixel" -> 0
+            fmt_map = {"BytePixel": 0, "Int16Pixel": 1, "Int32Pixel": 2, "FloatPixel": 3, "DoublePixel": 6, "ByteRGBPixel": 35}
+            self._original_format = fmt_map.get(val)
 
     def _set_array_x_param(self, name: str, fmt: str, count: int, data: bytes):
         if fmt == 'f':

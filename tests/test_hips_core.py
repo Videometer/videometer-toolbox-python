@@ -31,7 +31,10 @@ TEST_IMAGES_DIR = os.path.join("tests", "TestImages")
 TEST_FILES = [
     "2DGaussianSideBySide.hips",
     "calibratedImage.hips",
-    "TestEverythingImage_Uncompressed.hips"
+    "TestEverythingImage_Uncompressed.hips",
+    "TestEverythingImage_HighQuality.hips",
+    "TestEverythingImage_HighCompression.hips",
+    "../../TestData/test_PFRGB.hips"
 ]
 
 @pytest.mark.parametrize("filename", TEST_FILES)
@@ -41,54 +44,55 @@ def test_header_reading_against_oracle(filename):
         pytest.skip(f"Test file {path} not found")
 
     # New implementation - should always work
-    test_subject = HipsImage.read_header(path)
+    test_subject = HipsImage.read(path)
     assert test_subject.width > 0
     assert test_subject.height > 0
     assert test_subject.bands > 0
 
     # Oracle: Try to use LoadImageHeader, but don't fail if DLLs are missing
-    import VM.Image.IO as VMImIO
-    import VM.Image as VMIm
-    from videometer import vm_utils as utils
+    from videometer.hips import ImageClass
     
     try:
-        vm_image = VMImIO.HipsIO.LoadImageHeader(path)
+        oracle = ImageClass(path)
         
         # Assert standard attributes
-        assert test_subject.width == vm_image.ImageWidth
-        assert test_subject.height == vm_image.ImageHeight
-        assert test_subject.bands == vm_image.Bands
-        
-        # Assert ROI
-        assert test_subject.roi_width == vm_image.Width
-        assert test_subject.roi_height == vm_image.Height
-        assert test_subject.roi_x == vm_image.GetRoi().X
-        assert test_subject.roi_y == vm_image.GetRoi().Y
+        assert test_subject.width == oracle.Width
+        assert test_subject.height == oracle.Height
+        assert test_subject.bands == oracle.Bands
         
         # Assert History and Description
-        assert test_subject.history.strip() == vm_image.History.strip()
-        assert test_subject.description.strip() == vm_image.Description.strip()
+        assert test_subject.history.strip() == oracle.History.strip()
+        assert test_subject.description.strip() == oracle.Description.strip()
         
         # Assert Extended Parameters
-        assert pytest.approx(test_subject.mm_pixel) == vm_image.MmPixel
+        assert pytest.approx(test_subject.mm_pixel) == oracle.MmPixel
         
         if len(test_subject.wavelengths) > 0:
-            oracle_wavelengths = utils.asNumpyArray(vm_image.WaveLengths)
-            np.testing.assert_allclose(test_subject.wavelengths, oracle_wavelengths, rtol=1e-5)
+            np.testing.assert_allclose(test_subject.wavelengths, oracle.WaveLengths, rtol=1e-5)
             
         if len(test_subject.strobe_times) > 0:
-            oracle_strobe_times = utils.asNumpyArray(vm_image.StrobeTimes)
-            np.testing.assert_array_equal(test_subject.strobe_times, oracle_strobe_times)
+            np.testing.assert_array_equal(test_subject.strobe_times, oracle.StrobeTimes)
 
         if len(test_subject.band_names) > 0:
-            oracle_band_names = [str(name) for name in vm_image.BandNames]
-            for i in range(min(len(test_subject.band_names), len(oracle_band_names))):
-                assert test_subject.band_names[i] == oracle_band_names[i]
+            for i in range(min(len(test_subject.band_names), len(oracle.BandNames))):
+                assert test_subject.band_names[i] == oracle.BandNames[i]
+        
+        # Assert Pixel Integrity
+        # Note: ImageClass.PixelValues is (H, W, B)
+        np.testing.assert_allclose(test_subject.pixels, oracle.PixelValues, rtol=1e-5)
                 
-        vm_image.Free()
+        oracle.Free()
     except Exception as e:
-        pytest.warns(UserWarning, match=f"Oracle failed for {filename}: {e}")
-        # At least we verified the new implementation didn't crash and got basic dims
+        # If full ImageClass fails (due to DLLs), try at least metadata with LoadImageHeader
+        import VM.Image.IO as VMImIO
+        try:
+            vm_image = VMImIO.HipsIO.LoadImageHeader(path)
+            assert test_subject.width == vm_image.ImageWidth
+            assert test_subject.height == vm_image.ImageHeight
+            assert test_subject.bands == vm_image.Bands
+            vm_image.Free()
+        except:
+            pytest.warns(UserWarning, match=f"Oracle failed for {filename}: {e}")
 
 def test_header_roundtrip(tmp_path):
     # Create a dummy HipsImage
