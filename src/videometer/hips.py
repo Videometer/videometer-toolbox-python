@@ -620,7 +620,12 @@ def write(image, path, compression="SameAsImageClass", verbose=False):
         #       CLR CAN'T CAST FROM np.str_, np.float32, np.int32 TO
         #       System.String(), System.Single(), System.Int()
 
-        Image_net.BandCompressionMode = bandCompressionMode
+        if bandCompressionMode is not None:
+            import VM.Image.Compression as VMComp
+            Image_net.BandCompressionMode = VMComp.BandCompressionMode(int(bandCompressionMode))
+        else:
+            Image_net.BandCompressionMode = None
+
         Image_net.QuantificationParameters = quantificationParameters
         Image_net.Description = str(image.Description)
         Image_net.AddToHistory(str(image.History))

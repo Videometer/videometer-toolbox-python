@@ -30,6 +30,85 @@ class HipsFormat(IntEnum):
     PFBYTE_PNG = 0x200 + 0
     PFSHORT_PNG = 0x200 + 1
 
+class BaseEncoder:
+    """Base class for HIPS band encoders."""
+    def encode_band(self, band_data: np.ndarray) -> bytes:
+        raise NotImplementedError()
+
+class RawEncoder(BaseEncoder):
+    """Encodes band data as raw bytes."""
+    def __init__(self, dtype: np.dtype):
+        self.dtype = dtype
+        
+    def encode_band(self, band_data: np.ndarray) -> bytes:
+        # Ensure data is in the correct dtype and contiguous
+        return band_data.astype(self.dtype).tobytes()
+
+class GzipEncoder(BaseEncoder):
+    """Encodes band data using GZIP compression."""
+    def __init__(self, dtype: np.dtype):
+        self.dtype = dtype
+        
+    def encode_band(self, band_data: np.ndarray) -> bytes:
+        import gzip
+        raw_bytes = band_data.astype(self.dtype).tobytes()
+        return gzip.compress(raw_bytes)
+
+class PngEncoder(BaseEncoder):
+    """Encodes band data as a PNG image."""
+    def encode_band(self, band_data: np.ndarray) -> bytes:
+        import io
+        from PIL import Image
+        
+        # PIL expects (H, W) for grayscale
+        # band_data should be uint8 or uint16 for PNG
+        img = Image.fromarray(band_data)
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return buf.getvalue()
+
+class JpegEncoder(BaseEncoder):
+    """Encodes band data as a JPEG image."""
+    def __init__(self, quality: int = 90):
+        self.quality = quality
+        
+    def encode_band(self, band_data: np.ndarray) -> bytes:
+        import io
+        from PIL import Image
+        
+        # JPEG only supports uint8
+        if band_data.dtype != np.uint8:
+            band_data = band_data.astype(np.uint8)
+            
+        img = Image.fromarray(band_data)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG", quality=self.quality)
+        return buf.getvalue()
+
+# Pre-defined Videometer compression presets
+COMPRESSION_PRESETS = {
+    "Uncompressed": {
+        "format": HipsFormat.PFFLOAT,
+        "quantize": False
+    },
+    "VeryHighQuality": {
+        "format": HipsFormat.PFSHORT_PNG,
+        "quantize": True, "Q": 12, "Q_Min": 0.0, "Q_Max": 120.0
+    },
+    "HighQuality": {
+        "format": HipsFormat.PFSHORT_PNG,
+        "quantize": True, "Q": 10, "Q_Min": 0.0, "Q_Max": 120.0
+    },
+    "HighCompression": {
+        "format": HipsFormat.PFBYTE_PNG,
+        "quantize": True, "Q": 8, "Q_Min": 0.0, "Q_Max": 120.0
+    },
+    "VeryHighCompression": {
+        "format": HipsFormat.PFBYTE_JPG,
+        "quantize": True, "Q": 8, "Q_Min": 0.0, "Q_Max": 120.0
+    }
+}
+
 @dataclass
 class QuantificationParameters:
     """Parameters for de-quantizing image data."""
@@ -81,6 +160,7 @@ class HipsImage:
     _data_offset: int = 0
     _pixels: Optional[np.ndarray] = None
     _path: Optional[str] = None
+    _x_params_raw: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def pixels(self) -> np.ndarray:
@@ -88,6 +168,21 @@ class HipsImage:
         if self._pixels is None:
             self.load_pixels()
         return self._pixels
+
+    @pixels.setter
+    def pixels(self, value: np.ndarray):
+        """Sets the pixel data and updates dimensions."""
+        self._pixels = value
+        self.height, self.width = value.shape[:2]
+        if len(value.shape) > 2:
+            self.bands = value.shape[2]
+        else:
+            self.bands = 1
+        # Update ROI to match new full dimensions
+        self.roi_width = self.width
+        self.roi_height = self.height
+        self.roi_x = 0
+        self.roi_y = 0
 
     def load_pixels(self):
         """Loads the pixel data from the file."""
@@ -98,6 +193,7 @@ class HipsImage:
             f.seek(self._data_offset)
             
             # Identify compression
+            actual_format = self.format & 0x7F
             is_gz = bool(self.format & 0x80)
             is_jpg = bool(self.format & 0x100)
             is_png = bool(self.format & 0x200)
@@ -106,6 +202,23 @@ class HipsImage:
             if not is_compressed and self._quantization_parameters is None:
                 self._load_raw_pixels(f)
             else:
+                # Some files might have the format flag but NO size table 
+                # (e.g. if they were saved with a different version or specific settings)
+                # Check if first 4 bytes look like a plausible chunk size
+                curr_pos = f.tell()
+                first_4 = f.read(4)
+                f.seek(curr_pos)
+                
+                if len(first_4) < 4:
+                    raise EOFError("File ended before pixel data")
+                    
+                first_val = struct.unpack('<I', first_4)[0]
+                # If first_val matches total remaining size, or is just very large, 
+                # it might be a size table.
+                # If it's NOT a size table, it might be RAW data starting immediately.
+                
+                # For plate.hips, first_val was ~2.3M, which is smaller than raw band (~19M)
+                # so it IS likely a size table.
                 self._load_compressed_or_quantified_pixels(f, is_gz, is_jpg, is_png)
 
     def _load_compressed_or_quantified_pixels(self, f, is_gz, is_jpg, is_png):
@@ -115,7 +228,6 @@ class HipsImage:
         from PIL import Image
         
         # 1. Read size table
-        # For PFRGB, there might be only 1 chunk even if bands=3
         is_rgb = (self.format & 0x7F) == HipsFormat.PFRGB
         num_chunks = 1 if is_rgb else self.bands
         
@@ -149,7 +261,6 @@ class HipsImage:
             if is_gz:
                 decompressed_data = gzip.decompress(compressed_data)
                 if is_rgb:
-                    # Interleaved RGB: (H, W, 3)
                     temp_pixels = np.frombuffer(decompressed_data, dtype=np.uint8).reshape(self.height, self.width, 3)
                     self._pixels[:, :, :3] = temp_pixels
                     continue
@@ -160,11 +271,9 @@ class HipsImage:
                 with Image.open(io.BytesIO(compressed_data)) as img:
                     decompressed_band = np.array(img)
                     if is_rgb and len(decompressed_band.shape) == 3:
-                        # Interleaved RGB
                         self._pixels[:, :, :3] = decompressed_band
                         continue
             else:
-                # RAW but quantified
                 stored_dtype = np.uint8
                 if self._quantization_parameters:
                     stored_dtype = np.uint8 if self._quantization_parameters[b].Q <= 8 else np.int16
@@ -180,7 +289,6 @@ class HipsImage:
 
     def _load_raw_pixels(self, f):
         """Reads uncompressed band-sequential pixel data."""
-        # Map HipsFormat to numpy dtype
         dtype_map = {
             HipsFormat.PFBYTE: np.uint8,
             HipsFormat.PFSHORT: np.int16,
@@ -195,13 +303,11 @@ class HipsImage:
         element_size = np.dtype(dtype).itemsize
         
         if actual_format == HipsFormat.PFRGB:
-            # PFRGB is usually interleaved RGB: 3 bytes per pixel
             pixel_size = 3 * element_size
             total_size = self.width * self.height * pixel_size
             data = f.read(total_size)
             if len(data) < total_size:
                 raise EOFError("Unexpected end of file while reading RGB data")
-            # Reshape to (H, W, 3)
             self._pixels = np.frombuffer(data, dtype=dtype).reshape(self.height, self.width, 3)
         else:
             band_size = self.width * self.height * element_size
@@ -222,41 +328,27 @@ class HipsImage:
 
     @classmethod
     def read_header(cls, path: str) -> 'HipsImage':
-        """
-        Reads the HIPS header from a file.
-        """
+        """Reads the HIPS header from a file."""
         with open(path, 'rb') as f:
-            # First line: HIPS
             line = f.readline().decode('ascii').strip()
             if "HIPS" not in line:
                 raise ValueError(f"File {path} is not a valid HIPS image.")
             
-            # Skip 4 lines (onm, snm, frames, odt)
-            # Actually 'frames' is used as bands if it's > colors
             f.readline() # onm
             f.readline() # snm
             frames = int(f.readline().decode('ascii').strip())
             f.readline() # odt
             
-            # orows, ocols
             height = int(f.readline().decode('ascii').strip())
             width = int(f.readline().decode('ascii').strip())
             
-            # roirows, roicols, frow, fcol
             roi_height = int(f.readline().decode('ascii').strip())
             roi_width = int(f.readline().decode('ascii').strip())
             roi_y = int(f.readline().decode('ascii').strip())
             roi_x = int(f.readline().decode('ascii').strip())
             
-            # format
             pixel_format = HipsFormat(int(f.readline().decode('ascii').strip()))
-            
-            # colors
             colors = int(f.readline().decode('ascii').strip())
-            
-            # Number of bands calculation (matching HipsIO.cs)
-            # bands = ((frames > colors || format == ImageDataFormat.ByteRGBPixel) ? frames : colors);
-            # We don't have ImageDataFormat enum yet here, but ByteRGBPixel corresponds to PFRGB (35)
             bands = frames if (frames > colors or pixel_format == HipsFormat.PFRGB) else colors
             
             img = cls(
@@ -264,38 +356,29 @@ class HipsImage:
                 roi_height=roi_height, roi_width=roi_width, roi_y=roi_y, roi_x=roi_x
             )
             
-            # History
             szhist_line = f.readline().decode('ascii').strip()
             szhist = int(szhist_line)
             history_bytes = f.read(szhist)
             img.history = history_bytes.decode('utf-8', errors='replace').rstrip('\n\r\0')
             
-            # Swallow newline if any after history
             curr = f.tell()
             if f.read(1) != b'\n':
                 f.seek(curr)
                 
-            # Description
             szdesc_line = f.readline().decode('ascii').strip()
             szdesc = int(szdesc_line)
             description_bytes = f.read(szdesc)
             img.description = description_bytes.decode('utf-8', errors='replace').rstrip('\n\r\0')
             
-            # Swallow newline if any after description
             curr = f.tell()
             if f.read(1) != b'\n':
                 f.seek(curr)
                 
-            # Extended Parameters
             img._read_x_params(f)
-            
             img._data_offset = f.tell()
             return img
 
     def _read_x_params(self, f):
-        """
-        Parses extended (X-tra) parameters from the HIPS file.
-        """
         line = f.readline().decode('ascii').strip()
         if not line:
             return
@@ -309,51 +392,34 @@ class HipsImage:
             if len(parts) < 4:
                 continue
                 
-            name = parts[0]
-            fmt_char = parts[1][0]
-            count = int(parts[2])
-            val_or_offset = parts[3]
-            
             x_params.append({
-                'name': name,
-                'format': fmt_char,
-                'count': count,
-                'val_or_offset': val_or_offset
+                'name': parts[0],
+                'format': parts[1][0],
+                'count': int(parts[2]),
+                'val_or_offset': parts[3]
             })
             
-        # Binary block offset
         line = f.readline().decode('ascii').strip()
         if not line:
             return
         byte_offset_total = int(line)
-        
-        # Current position is where the binary block starts
         binary_start = f.tell()
         
-        # Process each parameter
         for xp in x_params:
             name = xp['name']
             fmt = xp['format']
             count = xp['count']
             
             if count == 1:
-                # Single value parameter
-                val = xp['val_or_offset']
-                self._set_single_x_param(name, fmt, val)
+                self._set_single_x_param(name, fmt, xp['val_or_offset'])
             else:
-                # Array parameter in binary block
                 offset = int(xp['val_or_offset'])
                 f.seek(binary_start + offset)
-                
-                # Calculate size and read
                 data_size = self._get_format_size(fmt) * count
-                # Alignment: (data_size + 3) & ~3
                 padded_size = (data_size + 3) & ~3
                 data = f.read(padded_size)
-                
                 self._set_array_x_param(name, fmt, count, data[:data_size])
                 
-        # Move file pointer to end of binary block
         f.seek(binary_start + byte_offset_total)
 
     def _get_format_size(self, fmt_char: str) -> int:
@@ -382,7 +448,6 @@ class HipsImage:
         elif name.startswith("ExtraDataString_"):
             self.extra_data_string[name[len("ExtraDataString_"):]] = val
         elif name == "BandQuantification":
-            # Parse XML for QuantificationParameters
             try:
                 root = ET.fromstring(val)
                 params = []
@@ -394,12 +459,31 @@ class HipsImage:
                     )
                     params.append(qp)
                 self._quantization_parameters = params
-            except Exception as e:
-                # Fallback or log error
+            except:
+                pass
+        elif name == "Quantification":
+            # Legacy Quantification (often a single instance for all bands)
+            try:
+                # Note spelling mistake in legacy XML tag: QuantificationParamaters
+                root = ET.fromstring(val)
+                # It might be directly the QuantificationParamaters node or wrapped
+                qp_node = root if root.tag == "QuantificationParamaters" else root.find(".//QuantificationParamaters")
+                if qp_node is not None:
+                    qp = QuantificationParameters(
+                        Q=int(qp_node.find('Q').text),
+                        Q_Min=float(qp_node.find('Q_Min').text),
+                        Q_Max=float(qp_node.find('Q_Max').text)
+                    )
+                    # Legacy applies to all bands
+                    self._quantization_parameters = [qp] * self.bands
+                    
+                    orig_fmt_node = qp_node.find('OriginalFormat')
+                    if orig_fmt_node is not None:
+                        fmt_map = {"BytePixel": 0, "Int16Pixel": 1, "Int32Pixel": 2, "FloatPixel": 3, "DoublePixel": 6, "ByteRGBPixel": 35}
+                        self._original_format = fmt_map.get(orig_fmt_node.text)
+            except:
                 pass
         elif name == "OriginalFormat":
-            # Map string to format integer if possible
-            # e.g., "BytePixel" -> 0
             fmt_map = {"BytePixel": 0, "Int16Pixel": 1, "Int32Pixel": 2, "FloatPixel": 3, "DoublePixel": 6, "ByteRGBPixel": 35}
             self._original_format = fmt_map.get(val)
 
@@ -428,48 +512,128 @@ class HipsImage:
         elif name == "BandIllumination":
             self.illumination = arr.astype(np.int32).copy()
 
+    def _write_to_handle(self, f):
+        """Internal helper to write header to an open file handle."""
+        f.write(b"HIPS\n")
+        f.write(b"\n") # onm
+        f.write(b"\n") # snm
+        f.write(f"{self.bands}\n".encode('ascii')) # frames
+        f.write(b"\n") # odt
+        f.write(f"{self.height}\n".encode('ascii'))
+        f.write(f"{self.width}\n".encode('ascii'))
+        f.write(f"{self.roi_height}\n".encode('ascii'))
+        f.write(f"{self.roi_width}\n".encode('ascii'))
+        f.write(f"{self.roi_y}\n".encode('ascii'))
+        f.write(f"{self.roi_x}\n".encode('ascii'))
+        f.write(f"{int(self.format)}\n".encode('ascii'))
+        f.write(f"{self.bands}\n".encode('ascii')) # colors
+        
+        hist_bytes = self.history.encode('utf-8') + b'\n'
+        f.write(f"{len(hist_bytes)}\n".encode('ascii'))
+        f.write(hist_bytes)
+        
+        desc_bytes = self.description.encode('utf-8') + b'\n'
+        f.write(f"{len(desc_bytes)}\n".encode('ascii'))
+        f.write(desc_bytes)
+        
+        self._write_x_params(f)
+
     def write_header(self, path: str):
-        """
-        Writes the HIPS header to a file.
-        NOTE: This only writes the header. Pixel data must be appended separately.
-        """
+        """Writes only the header to a file."""
         with open(path, 'wb') as f:
-            f.write(b"HIPS\n")
-            f.write(b"\n") # onm
-            f.write(b"\n") # snm
-            f.write(f"{self.bands}\n".encode('ascii')) # frames
-            f.write(b"\n") # odt
-            f.write(f"{self.height}\n".encode('ascii'))
-            f.write(f"{self.width}\n".encode('ascii'))
-            f.write(f"{self.roi_height}\n".encode('ascii'))
-            f.write(f"{self.roi_width}\n".encode('ascii'))
-            f.write(f"{self.roi_y}\n".encode('ascii'))
-            f.write(f"{self.roi_x}\n".encode('ascii'))
-            f.write(f"{int(self.format)}\n".encode('ascii'))
-            f.write(f"{self.bands}\n".encode('ascii')) # colors
+            self._write_to_handle(f)
+
+    def write(self, path: str, compression: Optional[str] = None):
+        """
+        Writes the HIPS image (header and data) to a file.
+        If compression is None, it attempts to use the current self.format.
+        """
+        if self._pixels is None:
+            self.load_pixels()
             
-            # History
-            hist_bytes = self.history.encode('utf-8') + b'\n'
-            f.write(f"{len(hist_bytes)}\n".encode('ascii'))
-            f.write(hist_bytes)
+        if compression is not None:
+            preset = COMPRESSION_PRESETS.get(compression)
+            if not preset:
+                raise ValueError(f"Invalid compression preset '{compression}'")
+                
+            self.format = preset["format"]
+            is_quantized = preset["quantize"]
             
-            # Description
-            desc_bytes = self.description.encode('utf-8') + b'\n'
-            f.write(f"{len(desc_bytes)}\n".encode('ascii'))
-            f.write(desc_bytes)
+            if is_quantized:
+                q_val = preset["Q"]
+                q_min = preset["Q_Min"]
+                q_max = preset["Q_Max"]
+                self._quantization_parameters = [
+                    QuantificationParameters(Q=q_val, Q_Min=q_min, Q_Max=q_max) 
+                    for _ in range(self.bands)
+                ]
+                self._original_format = HipsFormat.PFFLOAT
+            else:
+                self._quantization_parameters = None
+                self._original_format = None
+
+        is_gz = bool(self.format & 0x80)
+        is_jpg = bool(self.format & 0x100)
+        is_png = bool(self.format & 0x200)
+        is_chunked = is_gz or is_jpg or is_png
+        is_quantized = self._quantization_parameters is not None
+        
+        if is_png:
+            encoder = PngEncoder()
+        elif is_jpg:
+            encoder = JpegEncoder()
+        elif is_gz:
+            dtype = np.uint8 if is_quantized else np.float32
+            encoder = GzipEncoder(dtype)
+        else:
+            dtype = np.uint8 if is_quantized else np.float32
+            encoder = RawEncoder(dtype)
+
+        with open(path, 'wb') as f:
+            self._write_to_handle(f)
             
-            # X-tra parameters
-            self._write_x_params(f)
+            if is_chunked:
+                size_table_pos = f.tell()
+                f.write(b'\0' * (self.bands * 4))
+                
+                chunk_sizes = []
+                for b in range(self.bands):
+                    band_data = self._pixels[:, :, b]
+                    if is_quantized:
+                        band_data = self._quantize_band(band_data, self._quantization_parameters[b])
+                    
+                    encoded_bytes = encoder.encode_band(band_data)
+                    chunk_sizes.append(len(encoded_bytes))
+                    f.write(encoded_bytes)
+                    
+                final_pos = f.tell()
+                f.seek(size_table_pos)
+                for size in chunk_sizes:
+                    f.write(struct.pack('<I', size))
+                f.seek(final_pos)
+            else:
+                for b in range(self.bands):
+                    band_data = self._pixels[:, :, b]
+                    if is_quantized:
+                        band_data = self._quantize_band(band_data, self._quantization_parameters[b])
+                    f.write(encoder.encode_band(band_data))
+
+    def _quantize_band(self, band_data: np.ndarray, qp: QuantificationParameters) -> np.ndarray:
+        max_q = float(2**qp.Q - 1)
+        range_val = qp.Q_Max - qp.Q_Min
+        if range_val == 0:
+            quantized = np.zeros_like(band_data)
+        else:
+            quantized = (band_data - qp.Q_Min) / range_val * max_q
+            
+        dtype = np.uint8 if qp.Q <= 8 else np.int16
+        return np.round(quantized).clip(0, max_q).astype(dtype)
 
     def _write_x_params(self, f):
-        """
-        Serializes extended (X-tra) parameters.
-        """
         x_params = []
         binary_data = b""
         curr_offset = 0
         
-        # Simple values
         if self.mm_pixel != 0.0:
             x_params.append(f"MmPixel f 1 {self.mm_pixel}")
         if self.camera_temperature != 0.0:
@@ -481,12 +645,25 @@ class HipsImage:
         if self.drawing_primitive_xml:
             x_params.append(f"DrawingPrimitiveXML c 1 {self.drawing_primitive_xml}")
             
-        # Band names
+        if self._quantization_parameters:
+            root = ET.Element("ArrayOfQuantificationParameters")
+            for qp in self._quantization_parameters:
+                qp_node = ET.SubElement(root, "QuantificationParameters")
+                ET.SubElement(qp_node, "Q").text = str(qp.Q)
+                ET.SubElement(qp_node, "Q_Min").text = str(qp.Q_Min)
+                ET.SubElement(qp_node, "Q_Max").text = str(qp.Q_Max)
+            xml_str = ET.tostring(root, encoding='unicode')
+            x_params.append(f"BandQuantification c 1 {xml_str}")
+            
+        if self._original_format is not None:
+            fmt_names = {0: "BytePixel", 1: "Int16Pixel", 2: "Int32Pixel", 3: "FloatPixel", 6: "DoublePixel", 35: "ByteRGBPixel"}
+            fmt_name = fmt_names.get(self._original_format, "FloatPixel")
+            x_params.append(f"OriginalFormat c 1 {fmt_name}")
+
         for i, name in enumerate(self.band_names):
             if name:
                 x_params.append(f"BandName{i} c 1 {name}")
                 
-        # Extra data
         for k, v in self.extra_data.items():
             x_params.append(f"ExtraData_{k} f 1 {v}")
         for k, v in self.extra_data_int.items():
@@ -494,7 +671,6 @@ class HipsImage:
         for k, v in self.extra_data_string.items():
             x_params.append(f"ExtraDataString_{k} c 1 {v}")
                 
-        # Arrays
         def add_array(name, arr, fmt_char):
             nonlocal binary_data, curr_offset
             if len(arr) == 0:
@@ -516,21 +692,18 @@ class HipsImage:
             curr_offset += pad
 
         add_array("BandWaveLength", self.wavelengths, 'f')
-        add_array("BandStrobeTime", self.strobe_times, 'f') # Legacy stores as float
+        add_array("BandStrobeTime", self.strobe_times, 'f')
         add_array("BandStrobeTimesUniversal", self.strobe_times_universal, 'f')
-        add_array("BandIllumination", self.illumination, 'f') # Legacy stores as float
+        add_array("BandIllumination", self.illumination, 'f')
             
-        # Write n_param
         f.write(f"{len(x_params)}\n".encode('ascii'))
         for p in x_params:
             f.write(f"{p}\n".encode('ascii'))
             
-        # Write total byte offset
         f.write(f"{len(binary_data)}\n".encode('ascii'))
         f.write(binary_data)
         
     def __str__(self) -> str:
-        """Returns a string summary of the HIPS image (truncated history/description)."""
         hist_short = self.history.replace('\n', ' ')[:100]
         desc_short = self.description.replace('\n', ' ')[:100]
         lines = [
@@ -543,41 +716,31 @@ class HipsImage:
             f"  History: {hist_short}..." if len(self.history) > 100 else f"  History: {self.history}",
             f"  Description: {desc_short}..." if len(self.description) > 100 else f"  Description: {self.description}",
         ]
-        
         if len(self.wavelengths) > 0:
             wl_str = ", ".join([f"{w:.1f}" for w in self.wavelengths[:5]])
             if len(self.wavelengths) > 5:
                 wl_str += ", ..."
             lines.append(f"  Wavelengths: [{wl_str}]")
-            
         if self.extra_data:
             lines.append(f"  Extra Data: {list(self.extra_data.keys())}")
-            
         if self.id:
             lines.append(f"  ID: {self.id}")
-            
         return "\n".join(lines)
 
 def main():
     import argparse
     import sys
-    
     parser = argparse.ArgumentParser(description="Inspect HIPS file header information.")
     parser.add_argument("path", help="Path to the .hips file")
     parser.add_argument("-v", "--verbose", action="store_true", help="Show all parameters and full history")
     parser.add_argument("--history", action="store_true", help="Show full history and description")
-    
     args = parser.parse_args()
-    
     if not os.path.exists(args.path):
         print(f"Error: File {args.path} not found.")
         sys.exit(1)
-        
     try:
         img = HipsImage.read_header(args.path)
-        
         if args.verbose or args.history:
-            # Print full info
             print(f"HIPS Image: {args.path}")
             print(f"  Dimensions: {img.width}x{img.height} pixels")
             print(f"  Bands: {img.bands}")
@@ -586,7 +749,6 @@ def main():
             print(f"  ROI: {img.roi_width}x{img.roi_height} at ({img.roi_x}, {img.roi_y})")
             print(f"\n--- History ---\n{img.history}")
             print(f"\n--- Description ---\n{img.description}")
-            
             if args.verbose:
                 print("\n--- Extended Parameters ---")
                 if len(img.wavelengths) > 0:
@@ -611,7 +773,6 @@ def main():
                     print(f"  Freehand Layers XML: {len(img.freehand_layers_xml)} bytes")
         else:
             print(img)
-                
     except Exception as e:
         print(f"Error reading HIPS file: {e}")
         sys.exit(1)
