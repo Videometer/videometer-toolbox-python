@@ -109,6 +109,25 @@ COMPRESSION_PRESETS = {
     }
 }
 
+# Illumination types mapping
+ILLUMINATION_TYPES = {
+    -1: "Mixed",
+    0: "NA",
+    1: "Empty",
+    2: "Diffused_Highpower_LED",
+    3: "Brightfield_BackLight",
+    4: "Darkfield_BackLight",
+    5: "Diffused_Laser",
+    6: "SpotLaser",
+    7: "Diffused_Lowpower_LED",
+    8: "Direct_Lowpower_LED",
+    9: "Diffused_UV",
+    10: "Harmless_Guide_Laser",
+    11: "TEST_PROBE",
+    12: "Darkfield_FrontLight",
+    13: "Coaxial_FrontLight",
+}
+
 @dataclass
 class QuantificationParameters:
     """Parameters for de-quantizing image data."""
@@ -183,6 +202,32 @@ class HipsImage:
         self.roi_height = self.height
         self.roi_x = 0
         self.roi_y = 0
+
+    @property
+    def illumination_names(self) -> List[str]:
+        """Returns the string names of the illumination types for each band."""
+        return [ILLUMINATION_TYPES.get(int(i), "NA") for i in self.illumination]
+
+    def reduce_bands(self, indexes: List[int]):
+        """Reduces the image to only the specified band indexes."""
+        if self._pixels is None:
+            self.load_pixels()
+            
+        self._pixels = self._pixels[:, :, indexes]
+        self.bands = len(indexes)
+        
+        if len(self.wavelengths) > 0:
+            self.wavelengths = self.wavelengths[indexes]
+        if len(self.strobe_times) > 0:
+            self.strobe_times = self.strobe_times[indexes]
+        if len(self.strobe_times_universal) > 0:
+            self.strobe_times_universal = self.strobe_times_universal[indexes]
+        if len(self.illumination) > 0:
+            self.illumination = self.illumination[indexes]
+        if self.band_names:
+            self.band_names = [self.band_names[i] for i in indexes if i < len(self.band_names)]
+        if self._quantization_parameters:
+            self._quantization_parameters = [self._quantization_parameters[i] for i in indexes]
 
     def load_pixels(self):
         """Loads the pixel data from the file."""
@@ -336,64 +381,72 @@ class HipsImage:
     def read_header(cls, path: str) -> 'HipsImage':
         """Reads the HIPS header from a file."""
         with open(path, 'rb') as f:
+            def read_next_val():
+                while True:
+                    line = f.readline().decode('ascii', errors='replace').strip()
+                    if line:
+                        return line
+
             line = f.readline().decode('ascii').strip()
             if "HIPS" not in line:
                 raise ValueError(f"File {path} is not a valid HIPS image.")
             
             f.readline() # onm
             f.readline() # snm
-            frames = int(f.readline().decode('ascii').strip())
+            frames = int(read_next_val())
             f.readline() # odt
             
-            height = int(f.readline().decode('ascii').strip())
-            width = int(f.readline().decode('ascii').strip())
+            height = int(read_next_val())
+            width = int(read_next_val())
             
-            roi_height = int(f.readline().decode('ascii').strip())
-            roi_width = int(f.readline().decode('ascii').strip())
-            roi_y = int(f.readline().decode('ascii').strip())
-            roi_x = int(f.readline().decode('ascii').strip())
+            roi_height = int(read_next_val())
+            roi_width = int(read_next_val())
+            roi_y = int(read_next_val())
+            roi_x = int(read_next_val())
             
-            pixel_format = HipsFormat(int(f.readline().decode('ascii').strip()))
-            colors = int(f.readline().decode('ascii').strip())
+            pixel_format = HipsFormat(int(read_next_val()))
+            colors = int(read_next_val())
             bands = frames if (frames > colors or pixel_format == HipsFormat.PFRGB) else colors
             
             img = cls(
                 width=width, height=height, bands=bands, format=pixel_format,
                 roi_height=roi_height, roi_width=roi_width, roi_y=roi_y, roi_x=roi_x
             )
+            img._path = path
             
-            szhist_line = f.readline().decode('ascii').strip()
-            szhist = int(szhist_line)
+            szhist = int(read_next_val())
             history_bytes = f.read(szhist)
             img.history = history_bytes.decode('utf-8', errors='replace').rstrip('\n\r\0')
             
-            curr = f.tell()
-            if f.read(1) != b'\n':
-                f.seek(curr)
-                
-            szdesc_line = f.readline().decode('ascii').strip()
-            szdesc = int(szdesc_line)
+            szdesc = int(read_next_val())
             description_bytes = f.read(szdesc)
             img.description = description_bytes.decode('utf-8', errors='replace').rstrip('\n\r\0')
             
-            curr = f.tell()
-            if f.read(1) != b'\n':
-                f.seek(curr)
-                
+            # Extended Parameters
             img._read_x_params(f)
             img._data_offset = f.tell()
             return img
 
     def _read_x_params(self, f):
-        line = f.readline().decode('ascii').strip()
-        if not line:
-            return
+        def read_next_val():
+            while True:
+                line = f.readline().decode('ascii', errors='replace').strip()
+                if line:
+                    return line
         
+        try:
+            line = read_next_val()
+        except:
+            return
+            
         n_param = int(line)
         x_params = []
         
         for _ in range(n_param):
-            headerline = f.readline().decode('ascii').strip()
+            headerline = f.readline().decode('ascii', errors='replace').strip()
+            if not headerline: # Handle empty lines in xparam headers if any
+                headerline = read_next_val()
+                
             parts = headerline.split(' ', 3)
             if len(parts) < 4:
                 continue
@@ -405,9 +458,7 @@ class HipsImage:
                 'val_or_offset': parts[3]
             })
             
-        line = f.readline().decode('ascii').strip()
-        if not line:
-            return
+        line = read_next_val()
         byte_offset_total = int(line)
         binary_start = f.tell()
         
@@ -431,7 +482,46 @@ class HipsImage:
     def _get_format_size(self, fmt_char: str) -> int:
         return {'b': 1, 's': 2, 'i': 4, 'f': 4, 'd': 8, 'c': 1}.get(fmt_char, 1)
 
+    def _parse_quantization(self, val: str, is_legacy: bool):
+        """Helper to parse XML quantization parameters."""
+        try:
+            # Handle possible UTF-16 declaration in a string already decoded as UTF-8/ASCII
+            if 'encoding="utf-16"' in val:
+                val = val.replace('encoding="utf-16"', 'encoding="utf-8"')
+            
+            root = ET.fromstring(val)
+            if is_legacy:
+                # Note spelling mistake in legacy XML tag: QuantificationParamaters
+                qp_node = root if "QuantificationParamaters" in root.tag else root.find(".//QuantificationParamaters")
+                if qp_node is not None:
+                    qp = QuantificationParameters(
+                        Q=int(float(qp_node.find('Q').text)),
+                        Q_Min=float(qp_node.find('Q_Min').text),
+                        Q_Max=float(qp_node.find('Q_Max').text)
+                    )
+                    self._quantization_parameters = [qp] * self.bands
+                    
+                    orig_fmt_node = qp_node.find('OriginalFormat')
+                    if orig_fmt_node is not None:
+                        fmt_map = {"BytePixel": 0, "Int16Pixel": 1, "Int32Pixel": 2, "FloatPixel": 3, "DoublePixel": 6, "ByteRGBPixel": 35}
+                        self._original_format = fmt_map.get(orig_fmt_node.text)
+            else:
+                params = []
+                for qp_node in root.findall('.//QuantificationParameters'):
+                    qp = QuantificationParameters(
+                        Q=int(qp_node.find('Q').text),
+                        Q_Min=float(qp_node.find('Q_Min').text),
+                        Q_Max=float(qp_node.find('Q_Max').text)
+                    )
+                    params.append(qp)
+                if params:
+                    self._quantization_parameters = params
+        except Exception as e:
+            # print(f"DEBUG: XML Parse error: {e}")
+            pass
+
     def _set_single_x_param(self, name: str, fmt: str, val: str):
+        self._x_params_raw[name] = val
         if name == "MmPixel":
             self.mm_pixel = float(val)
         elif name == "CameraTemperature":
@@ -443,10 +533,12 @@ class HipsImage:
         elif name == "DrawingPrimitiveXML":
             self.drawing_primitive_xml = val
         elif name.startswith("BandName"):
-            idx = int(name[len("BandName"):])
-            while len(self.band_names) <= idx:
-                self.band_names.append("")
-            self.band_names[idx] = val
+            try:
+                idx = int(name[len("BandName"):])
+                while len(self.band_names) <= idx:
+                    self.band_names.append("")
+                self.band_names[idx] = val
+            except: pass
         elif name.startswith("ExtraData_"):
             self.extra_data[name[len("ExtraData_"):]] = float(val)
         elif name.startswith("ExtraDataInt_"):
@@ -454,41 +546,9 @@ class HipsImage:
         elif name.startswith("ExtraDataString_"):
             self.extra_data_string[name[len("ExtraDataString_"):]] = val
         elif name == "BandQuantification":
-            try:
-                root = ET.fromstring(val)
-                params = []
-                for qp_node in root.findall('QuantificationParameters'):
-                    qp = QuantificationParameters(
-                        Q=int(qp_node.find('Q').text),
-                        Q_Min=float(qp_node.find('Q_Min').text),
-                        Q_Max=float(qp_node.find('Q_Max').text)
-                    )
-                    params.append(qp)
-                self._quantization_parameters = params
-            except:
-                pass
+            self._parse_quantization(val, is_legacy=False)
         elif name == "Quantification":
-            # Legacy Quantification (often a single instance for all bands)
-            try:
-                # Note spelling mistake in legacy XML tag: QuantificationParamaters
-                root = ET.fromstring(val)
-                # It might be directly the QuantificationParamaters node or wrapped
-                qp_node = root if root.tag == "QuantificationParamaters" else root.find(".//QuantificationParamaters")
-                if qp_node is not None:
-                    qp = QuantificationParameters(
-                        Q=int(qp_node.find('Q').text),
-                        Q_Min=float(qp_node.find('Q_Min').text),
-                        Q_Max=float(qp_node.find('Q_Max').text)
-                    )
-                    # Legacy applies to all bands
-                    self._quantization_parameters = [qp] * self.bands
-                    
-                    orig_fmt_node = qp_node.find('OriginalFormat')
-                    if orig_fmt_node is not None:
-                        fmt_map = {"BytePixel": 0, "Int16Pixel": 1, "Int32Pixel": 2, "FloatPixel": 3, "DoublePixel": 6, "ByteRGBPixel": 35}
-                        self._original_format = fmt_map.get(orig_fmt_node.text)
-            except:
-                pass
+            self._parse_quantization(val, is_legacy=True)
         elif name == "OriginalFormat":
             fmt_map = {"BytePixel": 0, "Int16Pixel": 1, "Int32Pixel": 2, "FloatPixel": 3, "DoublePixel": 6, "ByteRGBPixel": 35}
             self._original_format = fmt_map.get(val)
@@ -505,9 +565,11 @@ class HipsImage:
         elif fmt == 'b':
             arr = np.frombuffer(data, dtype=np.uint8, count=count)
         elif fmt == 'c':
-            arr = data.decode('ascii', errors='replace')
+            arr = data.decode('ascii', errors='replace').rstrip('\0')
         else:
             return
+
+        self._x_params_raw[name] = arr
 
         if name == "BandWaveLength":
             self.wavelengths = arr.copy()
@@ -517,6 +579,25 @@ class HipsImage:
             self.strobe_times_universal = arr.copy()
         elif name == "BandIllumination":
             self.illumination = arr.astype(np.int32).copy()
+        elif name.startswith("BandName"):
+            try:
+                idx = int(name[len("BandName"):])
+                while len(self.band_names) <= idx:
+                    self.band_names.append("")
+                self.band_names[idx] = str(arr)
+            except: pass
+        elif name.startswith("ExtraData_"):
+            val = float(arr[0]) if hasattr(arr, '__len__') and len(arr)>0 else (float(arr) if not isinstance(arr, str) else 0.0)
+            self.extra_data[name[len("ExtraData_"):]] = val
+        elif name.startswith("ExtraDataInt_"):
+            val = int(arr[0]) if hasattr(arr, '__len__') and len(arr)>0 else (int(arr) if not isinstance(arr, str) else 0)
+            self.extra_data_int[name[len("ExtraDataInt_"):]] = val
+        elif name.startswith("ExtraDataString_"):
+            self.extra_data_string[name[len("ExtraDataString_"):]] = str(arr)
+        elif name == "BandQuantification":
+            self._parse_quantization(str(arr), is_legacy=False)
+        elif name == "Quantification":
+            self._parse_quantization(str(arr), is_legacy=True)
 
     def _write_to_handle(self, f):
         """Internal helper to write header to an open file handle."""
@@ -577,6 +658,11 @@ class HipsImage:
             else:
                 self._quantization_parameters = None
                 self._original_format = None
+        else:
+            # If no compression preset specified, but we are writing float32 pixels to a PFBYTE format, 
+            # we should probably default to PFFLOAT to avoid data loss.
+            if self.format == HipsFormat.PFBYTE and self._pixels.dtype == np.float32:
+                self.format = HipsFormat.PFFLOAT
 
         is_gz = bool(self.format & 0x80)
         is_jpg = bool(self.format & 0x100)
@@ -589,10 +675,10 @@ class HipsImage:
         elif is_jpg:
             encoder = JpegEncoder()
         elif is_gz:
-            dtype = np.uint8 if is_quantized else np.float32
+            dtype = np.uint8 if is_quantized else (np.float32 if (self.format & 0x7F) == HipsFormat.PFFLOAT else np.uint8)
             encoder = GzipEncoder(dtype)
         else:
-            dtype = np.uint8 if is_quantized else np.float32
+            dtype = np.uint8 if is_quantized else (np.float32 if (self.format & 0x7F) == HipsFormat.PFFLOAT else np.uint8)
             encoder = RawEncoder(dtype)
 
         with open(path, 'wb') as f:
@@ -724,6 +810,18 @@ class HipsImage:
         if self.id:
             lines.append(f"  ID: {self.id}")
         return "\n".join(lines)
+
+def write(image: Union[HipsImage, np.ndarray], path: str, compression: Optional[str] = None):
+    """
+    Convenience function to write an image to a HIPS file.
+    image can be a HipsImage object or a numpy array.
+    """
+    if isinstance(image, np.ndarray):
+        img_obj = HipsImage()
+        img_obj.pixels = image
+        img_obj.write(path, compression)
+    else:
+        image.write(path, compression)
 
 def main():
     import argparse
