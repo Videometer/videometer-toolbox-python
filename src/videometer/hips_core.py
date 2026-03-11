@@ -267,17 +267,15 @@ class HipsImage:
                 self._load_compressed_or_quantified_pixels(f, is_gz, is_jpg, is_png)
 
     def _load_compressed_or_quantified_pixels(self, f, is_gz, is_jpg, is_png):
-        """Handles chunked compressed data and de-quantization."""
+        """Handles chunked compressed data and de-quantization with tiered bit-depth."""
         import gzip
         import io
         from PIL import Image
         
-        # Determine target dtype
-        if self._quantization_parameters:
+        # Identity Swap: If OriginalFormat or quantization present, target is always float32
+        if self._quantization_parameters or self._original_format is not None:
             target_dtype = np.float32
         else:
-            actual_format = (self._original_format if self._original_format is not None 
-                             else (self.format & 0x7F))
             dtype_map = {
                 HipsFormat.PFBYTE: np.uint8,
                 HipsFormat.PFSHORT: np.int16,
@@ -286,13 +284,12 @@ class HipsImage:
                 HipsFormat.PFDOUBLE: np.float64,
                 HipsFormat.PFRGB: np.uint8,
             }
+            actual_format = self.format & 0x7F
             target_dtype = dtype_map.get(actual_format, np.uint8)
 
         self._pixels = np.zeros((self.height, self.width, self.bands), dtype=target_dtype)
-        
         is_rgb = (self.format & 0x7F) == HipsFormat.PFRGB
         
-        # In HIPS chunked formats (256, 512, 513), chunks are interleaved: [Size][Data][Size][Data]
         for b in range(self.bands):
             size_data = f.read(4)
             if not size_data:
@@ -300,8 +297,13 @@ class HipsImage:
             chunk_size = struct.unpack('<I', size_data)[0]
             compressed_data = f.read(chunk_size)
             
-            # if b == 0:
-            #    print(f"DEBUG: Chunk 0 size={chunk_size}, hex={compressed_data[:16].hex(' ')}")
+            # Tiered Bit-Depth Container Selection
+            if self._quantization_parameters:
+                q_params = self._quantization_parameters[b]
+                stored_dtype = np.uint8 if q_params.Q <= 8 else np.int16
+            else:
+                # Default intermediate for non-quantified but compressed
+                stored_dtype = np.uint8 if not is_png and not is_jpg else None # PIL handles own dtype
             
             if is_gz:
                 decompressed_data = gzip.decompress(compressed_data)
@@ -310,30 +312,30 @@ class HipsImage:
                     self._pixels[:, :, :3] = temp_pixels
                     break # PFRGB is 1 chunk
                 else:
-                    decompressed_band = np.frombuffer(decompressed_data, 
-                                                     dtype=np.uint8 if self._quantization_parameters else target_dtype).reshape(self.height, self.width)
+                    decompressed_band = np.frombuffer(decompressed_data, dtype=stored_dtype).reshape(self.height, self.width)
             elif is_png or is_jpg:
-                # Pillow can handle PNG and JPEG from bytes
                 with Image.open(io.BytesIO(compressed_data)) as img:
                     decompressed_band = np.array(img)
                     if is_rgb and len(decompressed_band.shape) == 3:
-                        # Interleaved RGB
                         self._pixels[:, :, :3] = decompressed_band
                         break # 1 chunk
             else:
                 # RAW but quantified
-                stored_dtype = np.uint8
-                if self._quantization_parameters:
-                    stored_dtype = np.uint8 if self._quantization_parameters[b].Q <= 8 else np.int16
                 decompressed_band = np.frombuffer(compressed_data, dtype=stored_dtype).reshape(self.height, self.width)
                 
             if self._quantization_parameters:
+                # Reconstruction Engine (Inverse Linear Mapping)
                 q_params = self._quantization_parameters[b]
-                max_q = float(2**q_params.Q - 1)
-                factor = (q_params.Q_Max - q_params.Q_Min) / max_q
-                self._pixels[:, :, b] = decompressed_band.astype(np.float32) * factor + q_params.Q_Min
+                max_q_val = float(2**q_params.Q - 1)
+                q_range = q_params.Q_Max - q_params.Q_Min
+                
+                if q_range == 0:
+                    self._pixels[:, :, b] = q_params.Q_Min
+                else:
+                    # Match C# logic: Factor = (2^Q - 1) / Range
+                    factor = max_q_val / q_range
+                    self._pixels[:, :, b] = decompressed_band.astype(np.float32) / factor + q_params.Q_Min
             else:
-                # Handle potential (H, W, 1) from Pillow
                 if len(decompressed_band.shape) == 3 and decompressed_band.shape[2] == 1:
                     decompressed_band = decompressed_band.reshape(self.height, self.width)
                 self._pixels[:, :, b] = decompressed_band.astype(target_dtype)
@@ -483,24 +485,37 @@ class HipsImage:
         return {'b': 1, 's': 2, 'i': 4, 'f': 4, 'd': 8, 'c': 1}.get(fmt_char, 1)
 
     def _parse_quantization(self, val: str, is_legacy: bool):
-        """Helper to parse XML quantization parameters."""
+        """Helper to parse XML quantization parameters, handling both elements and attributes."""
         try:
-            # Handle possible UTF-16 declaration in a string already decoded as UTF-8/ASCII
             if 'encoding="utf-16"' in val:
                 val = val.replace('encoding="utf-16"', 'encoding="utf-8"')
             
             root = ET.fromstring(val)
+            
+            def get_val(node, name):
+                # Property Resolver: Element -> Attribute
+                child = node.find(name)
+                if child is not None and child.text:
+                    return child.text
+                return node.get(name)
+
             if is_legacy:
-                # Note spelling mistake in legacy XML tag: QuantificationParamaters
+                # Normalization: Support misspelled legacy tag
                 qp_node = root if "QuantificationParamaters" in root.tag else root.find(".//QuantificationParamaters")
                 if qp_node is not None:
+                    q_str = get_val(qp_node, 'Q')
+                    q_min_str = get_val(qp_node, 'Q_Min')
+                    q_max_str = get_val(qp_node, 'Q_Max')
+                    
                     qp = QuantificationParameters(
-                        Q=int(float(qp_node.find('Q').text)),
-                        Q_Min=float(qp_node.find('Q_Min').text),
-                        Q_Max=float(qp_node.find('Q_Max').text)
+                        Q=int(float(q_str)) if q_str else 8,
+                        Q_Min=float(q_min_str) if q_min_str else 0.0,
+                        Q_Max=float(q_max_str) if q_max_str else 1.0
                     )
+                    # Normalization: Expand to all bands
                     self._quantization_parameters = [qp] * self.bands
                     
+                    # OriginalFormat determination
                     orig_fmt_node = qp_node.find('OriginalFormat')
                     if orig_fmt_node is not None:
                         fmt_map = {"BytePixel": 0, "Int16Pixel": 1, "Int32Pixel": 2, "FloatPixel": 3, "DoublePixel": 6, "ByteRGBPixel": 35}
@@ -508,16 +523,19 @@ class HipsImage:
             else:
                 params = []
                 for qp_node in root.findall('.//QuantificationParameters'):
+                    q_str = get_val(qp_node, 'Q')
+                    q_min_str = get_val(qp_node, 'Q_Min')
+                    q_max_str = get_val(qp_node, 'Q_Max')
+                    
                     qp = QuantificationParameters(
-                        Q=int(qp_node.find('Q').text),
-                        Q_Min=float(qp_node.find('Q_Min').text),
-                        Q_Max=float(qp_node.find('Q_Max').text)
+                        Q=int(float(q_str)) if q_str else 8,
+                        Q_Min=float(q_min_str) if q_min_str else 0.0,
+                        Q_Max=float(q_max_str) if q_max_str else 1.0
                     )
                     params.append(qp)
                 if params:
                     self._quantization_parameters = params
-        except Exception as e:
-            # print(f"DEBUG: XML Parse error: {e}")
+        except Exception:
             pass
 
     def _set_single_x_param(self, name: str, fmt: str, val: str):
