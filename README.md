@@ -17,8 +17,15 @@ Use the package manager [pip](https://pip.pypa.io/en/stable/) to install
 pip install videometer
 ```
 
-
 **Note : First time the videometer.hips is imported it will fetch DLLs**
+
+When updating package, it is necessary to call
+
+```bash
+python -m videometer --clean-dll
+```
+
+in order to clear the DLL cache.
 
 <br>
 
