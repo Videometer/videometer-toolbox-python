@@ -735,6 +735,31 @@ class HipsImage:
         dtype = np.uint8 if qp.Q <= 8 else np.int16
         return np.round(quantized).clip(0, max_q).astype(dtype)
 
+    def _generate_quantization_xml(self) -> str:
+        """
+        Generates a quantization XML string matching the legacy Videometer format.
+        
+        Requirements for Parity:
+        1. Declaration: Must specify utf-16 (even if stored as ASCII bytes in HIPS).
+        2. Namespaces: Root must include xsd and xsi definitions.
+        3. Attributes: Q, Q_Min, and Q_Max must be XML attributes, not elements.
+        4. Precision: Floats are formatted to avoid scientific notation where possible.
+        """
+        if not self._quantization_parameters:
+            return ""
+            
+        xml = '<?xml version="1.0" encoding="utf-16"?>\n'
+        xml += '<ArrayOfQuantificationParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
+        
+        for qp in self._quantization_parameters:
+            # Format floats to 6 decimal places to ensure stability across cultures
+            q_min = f"{qp.Q_Min:g}"
+            q_max = f"{qp.Q_Max:g}"
+            xml += f'  <QuantificationParameters Q_Min="{q_min}" Q_Max="{q_max}" Q="{qp.Q}" />\n'
+            
+        xml += '</ArrayOfQuantificationParameters>'
+        return xml
+
     def _write_x_params(self, f):
         """
         Writes Extended Parameters (X-tra parameters) matching the legacy C# HIPS_XParam logic.
@@ -796,13 +821,11 @@ class HipsImage:
             # Single numeric values stored in header
             x_params_to_write.append((name, fmt_char, 1, str(value)))
 
-        # 1. BandQuantification (Phase 3 XML template used here for compatibility)
+        # --- Phase 2: Mandatory Metadata ---
+        
+        # 1. BandQuantification (Phase 3 XML Fidelity)
         if self._quantization_parameters:
-            xml_str = '<?xml version="1.0" encoding="utf-16"?>\n' + \
-                      '<ArrayOfQuantificationParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
-            for qp in self._quantization_parameters:
-                xml_str += f'  <QuantificationParameters Q_Min="{qp.Q_Min}" Q_Max="{qp.Q_Max}" Q="{qp.Q}" />\n'
-            xml_str += '</ArrayOfQuantificationParameters>'
+            xml_str = self._generate_quantization_xml()
             add_to_list("BandQuantification", 'c', xml_str)
             
             # Mandatory Legacy Protection Key
