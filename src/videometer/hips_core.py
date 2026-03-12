@@ -633,11 +633,15 @@ class HipsImage:
         f.write(f"{int(self.format)}\n".encode('ascii'))
         f.write(f"{self.bands}\n".encode('ascii')) # colors
         
-        hist_bytes = self.history.encode('utf-8') + b'\n'
+        # Legacy Defaults: "No History" / "No Description"
+        hist = self.history if self.history else "No History"
+        desc = self.description if self.description else "No Description"
+        
+        hist_bytes = hist.encode('utf-8') + b'\n'
         f.write(f"{len(hist_bytes)}\n".encode('ascii'))
         f.write(hist_bytes)
         
-        desc_bytes = self.description.encode('utf-8') + b'\n'
+        desc_bytes = desc.encode('utf-8') + b'\n'
         f.write(f"{len(desc_bytes)}\n".encode('ascii'))
         f.write(desc_bytes)
         
@@ -732,79 +736,122 @@ class HipsImage:
         return np.round(quantized).clip(0, max_q).astype(dtype)
 
     def _write_x_params(self, f):
-        x_params = []
-        binary_data = b""
-        curr_offset = 0
+        """
+        Writes Extended Parameters (X-tra parameters) matching the legacy C# HIPS_XParam logic.
         
-        if self.mm_pixel != 0.0:
-            x_params.append(f"MmPixel f 1 {self.mm_pixel}")
-        if self.camera_temperature != 0.0:
-            x_params.append(f"CameraTemperature f 1 {self.camera_temperature}")
-        if self.id:
-            x_params.append(f"Id c 1 {self.id}")
-        if self.freehand_layers_xml:
-            x_params.append(f"FreehandLayersXML c 1 {self.freehand_layers_xml}")
-        if self.drawing_primitive_xml:
-            x_params.append(f"DrawingPrimitiveXML c 1 {self.drawing_primitive_xml}")
-            
+        HIPS Format Requirements for Parity:
+        1. Value-Offset Duality:
+           - Parameters with count == 1 are stored as literal strings in the header line.
+           - Parameters with count > 1 (including all strings > 1 char) are stored in the 
+             binary block with an offset.
+        2. Binary Alignment:
+           - Every entry in the binary block must be 4-byte aligned.
+        3. Mandatory Metadata:
+           - 'OriginalFormat': Forces the high-precision identity swap in the Oracle.
+           - 'Id': A valid GUID (defaults to zeros) required for object initialization.
+           - 'Quantification': A legacy dummy key required when BandQuantification is present.
+        4. Total Size:
+           - The 'byteOffset' line must reflect the total size of the padded binary block.
+        """
+        x_params_to_write = []
+        binary_block = bytearray()
+        
+        def add_to_list(name, fmt_char, value):
+            # Handle Strings ('c')
+            if fmt_char == 'c':
+                val_str = str(value)
+                if len(val_str) == 1:
+                    # Single char stored in header
+                    x_params_to_write.append((name, 'c', 1, val_str))
+                else:
+                    # Multi-char string stored in binary block
+                    offset = len(binary_block)
+                    data = val_str.encode('ascii', errors='replace')
+                    binary_block.extend(data)
+                    # Strict 4-byte padding
+                    pad = (4 - (len(data) % 4)) % 4
+                    binary_block.extend(b'\0' * pad)
+                    x_params_to_write.append((name, 'c', len(val_str), offset))
+                return
+
+            # Handle Arrays and Numeric Values
+            if isinstance(value, (list, np.ndarray)):
+                arr = np.atleast_1d(value)
+                if len(arr) == 1:
+                    # Single numeric value stored in header
+                    val = arr[0]
+                    x_params_to_write.append((name, fmt_char, 1, str(val)))
+                else:
+                    # Numeric array stored in binary block
+                    offset = len(binary_block)
+                    dtype_map = {'f': np.float32, 'i': np.int32, 'd': np.float64, 's': np.int16, 'b': np.uint8}
+                    data = arr.astype(dtype_map.get(fmt_char, np.float32)).tobytes()
+                    binary_block.extend(data)
+                    # Strict 4-byte padding
+                    pad = (4 - (len(data) % 4)) % 4
+                    binary_block.extend(b'\0' * pad)
+                    x_params_to_write.append((name, fmt_char, len(arr), offset))
+                return
+
+            # Single numeric values stored in header
+            x_params_to_write.append((name, fmt_char, 1, str(value)))
+
+        # 1. BandQuantification (Phase 3 XML template used here for compatibility)
         if self._quantization_parameters:
-            root = ET.Element("ArrayOfQuantificationParameters")
+            xml_str = '<?xml version="1.0" encoding="utf-16"?>\n' + \
+                      '<ArrayOfQuantificationParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
             for qp in self._quantization_parameters:
-                qp_node = ET.SubElement(root, "QuantificationParameters")
-                ET.SubElement(qp_node, "Q").text = str(qp.Q)
-                ET.SubElement(qp_node, "Q_Min").text = str(qp.Q_Min)
-                ET.SubElement(qp_node, "Q_Max").text = str(qp.Q_Max)
-            xml_str = ET.tostring(root, encoding='unicode')
-            x_params.append(f"BandQuantification c 1 {xml_str}")
+                xml_str += f'  <QuantificationParameters Q_Min="{qp.Q_Min}" Q_Max="{qp.Q_Max}" Q="{qp.Q}" />\n'
+            xml_str += '</ArrayOfQuantificationParameters>'
+            add_to_list("BandQuantification", 'c', xml_str)
             
-        if self._original_format is not None:
-            fmt_names = {0: "BytePixel", 1: "Int16Pixel", 2: "Int32Pixel", 3: "FloatPixel", 6: "DoublePixel", 35: "ByteRGBPixel"}
-            fmt_name = fmt_names.get(self._original_format, "FloatPixel")
-            x_params.append(f"OriginalFormat c 1 {fmt_name}")
+            # Mandatory Legacy Protection Key
+            add_to_list("Quantification", 'c', "Some random non-empty and non-null string")
+            
+        # 2. OriginalFormat (Critical for Identity Swap)
+        fmt_names = {0: "BytePixel", 1: "Int16Pixel", 2: "Int32Pixel", 3: "FloatPixel", 6: "DoublePixel", 35: "ByteRGBPixel"}
+        actual_fmt = self._original_format if self._original_format is not None else (self.format & 0x7F)
+        fmt_name = fmt_names.get(actual_fmt, "FloatPixel")
+        add_to_list("OriginalFormat", 'c', fmt_name)
+
+        # 3. Id (Mandatory GUID)
+        x_id = self.id if self.id else "00000000-0000-0000-0000-000000000000"
+        add_to_list("Id", 'c', x_id)
+
+        # 4. Standard Metadata
+        if self.mm_pixel != 0.0:
+            add_to_list("MmPixel", 'f', self.mm_pixel)
+        if self.camera_temperature != 0.0:
+            add_to_list("CameraTemperature", 'f', self.camera_temperature)
+        if self.freehand_layers_xml:
+            add_to_list("FreehandLayersXML", 'c', self.freehand_layers_xml)
+        if self.drawing_primitive_xml:
+            add_to_list("DrawingPrimitiveXML", 'c', self.drawing_primitive_xml)
 
         for i, name in enumerate(self.band_names):
-            if name:
-                x_params.append(f"BandName{i} c 1 {name}")
+            if name: add_to_list(f"BandName{i}", 'c', name)
                 
-        for k, v in self.extra_data.items():
-            x_params.append(f"ExtraData_{k} f 1 {v}")
-        for k, v in self.extra_data_int.items():
-            x_params.append(f"ExtraDataInt_{k} i 1 {v}")
-        for k, v in self.extra_data_string.items():
-            x_params.append(f"ExtraDataString_{k} c 1 {v}")
+        for k, v in self.extra_data.items(): add_to_list(f"ExtraData_{k}", 'f', v)
+        for k, v in self.extra_data_int.items(): add_to_list(f"ExtraDataInt_{k}", 'i', v)
+        for k, v in self.extra_data_string.items(): add_to_list(f"ExtraDataString_{k}", 'c', v)
                 
-        def add_array(name, arr, fmt_char):
-            nonlocal binary_data, curr_offset
-            if len(arr) == 0:
-                return
-            count = len(arr)
-            if fmt_char == 'f':
-                data = arr.astype(np.float32).tobytes()
-            elif fmt_char == 'i':
-                data = arr.astype(np.int32).tobytes()
-            elif fmt_char == 'd':
-                data = arr.astype(np.float64).tobytes()
-            else:
-                return
-                
-            x_params.append(f"{name} {fmt_char} {count} {curr_offset}")
-            binary_data += data
-            pad = (len(data) + 3) & ~3
-            binary_data += b'\0' * (pad - len(data))
-            curr_offset += pad
+        if len(self.wavelengths) > 0: add_to_list("BandWaveLength", 'f', self.wavelengths)
+        if len(self.strobe_times) > 0: add_to_list("BandStrobeTime", 'f', self.strobe_times)
+        if len(self.strobe_times_universal) > 0: add_to_list("BandStrobeTimesUniversal", 'f', self.strobe_times_universal)
+        if len(self.illumination) > 0: add_to_list("BandIllumination", 'f', self.illumination)
+            
+        # Write nPar
+        f.write(f"{len(x_params_to_write)}\n".encode('ascii'))
+        # Write Parameter Lines (Name Format Count Value/Offset)
+        for name, fmt, count, val_or_offset in x_params_to_write:
+            f.write(f"{name} {fmt} {count} {val_or_offset}\n".encode('ascii'))
+            
+        # Write Byte Offset Line (Total binary block size)
+        f.write(f"{len(binary_block)}\n".encode('ascii'))
+        # Write Binary Block
+        if binary_block:
+            f.write(binary_block)
 
-        add_array("BandWaveLength", self.wavelengths, 'f')
-        add_array("BandStrobeTime", self.strobe_times, 'f')
-        add_array("BandStrobeTimesUniversal", self.strobe_times_universal, 'f')
-        add_array("BandIllumination", self.illumination, 'f')
-            
-        f.write(f"{len(x_params)}\n".encode('ascii'))
-        for p in x_params:
-            f.write(f"{p}\n".encode('ascii'))
-            
-        f.write(f"{len(binary_data)}\n".encode('ascii'))
-        f.write(binary_data)
-        
     def __str__(self) -> str:
         hist_short = self.history.replace('\n', ' ')[:100]
         desc_short = self.description.replace('\n', ' ')[:100]
