@@ -6,23 +6,32 @@ A toolbox for multispectral .HIPS images from Videometer A/S
 
 ## Installation 
   
-System requirements: 
+System requirements depends on decoding backend.
+
+Python backend:
+- Same as the Pillow Python package
+
+Or:
 - Windows operating system
 - 64-bit Intel processor
-
-
 
 Use the package manager [pip](https://pip.pypa.io/en/stable/) to install
 ```bash
 pip install videometer
 ```
 
+### Backends
 
-**Note : First time the videometer.hips is imported it will fetch DLLs**
+The package supports two backends for decoding images. The default `clr` backend is fully compatible with VideometerLab and the experimental `python` backend which offers cross platform support.
 
-<br>
+The first time the `clr` backend is used the supporting DLLs will be downloaded, which requires an internet connection.
 
+Switching backend is done using the following snippet at the beginning of the Python program.
 
+```python
+import videometer
+videometer.set_backend("python")
+```
 
 ## Usage - Read
 

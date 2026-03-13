@@ -1,48 +1,10 @@
-# Add path to ipp DLLs in runtime
 import os
 import sys
-
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-
-VMPATH = os.path.dirname(os.path.abspath(__file__))
-IPP_PATH = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
-DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
-
-# If DLLs are not found
-if not os.path.isdir(IPP_PATH):
-    print("Attention. \nRequired DLLs were not found. Let me get them for you")
-    from videometer.setup_helper import setupDlls
-
-    setupDlls()
-
-# Add the path to the IPP files at the front to it will be checked first
-os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
-sys.path.append(DLL_PATH)
-
 import matplotlib.pyplot as plt
 import numpy as np
-import pythonnet
-# This MUST be called before "import clr"
-pythonnet.load("coreclr")
-import clr
 import tempfile
 from videometer import vm_utils as utils
-
-clr.AddReference("VM.Blobs")
-clr.AddReference("VM.FreehandLayerIO")
-clr.AddReference("VM.GUI.Image.WinForms")
-clr.AddReference("VM.Image.NETBitmap")
-clr.AddReference("VM.Image.ViewTransforms")
-clr.AddReference("VM.Image")
-clr.AddReference("VM.Jobs")
-
-"""import class methods from C#"""
-import VM.Image as VMIm
-import VM.Image.IO as VMImIO
-import VM.FreehandLayer as VMFreehand
-import VM.Image.ViewTransforms as VMImTransForms
-from VM.Blobs import BlobImage as _BlobImage
-
+from videometer import config
 
 class ImageClass:
     """Attributes:
@@ -161,12 +123,46 @@ class ImageClass:
                                 Makes the reading quicker. Default is False.
 
         """
+        self.PixelValues = None
+        self.Height = 0
+        self.Width = 0
+        self.Bands = 0
+        self.BandNames = None
+        self.Illumination = None
+        self.WaveLengths = None
+        self.StrobeTimes = None
+        self.StrobeTimesUniversal = None
+        self.MmPixel = 0.0
+        self.History = ""
+        self.Description = ""
+        self.ImageFileName = ""
+        self.FullPathToImage = ""
+        self.FreehandLayers = None
+        self.ForegroundPixels = None
+        self.DeadPixels = None
+        self.SaturatedPixels = None
+        self.CorrectedPixels = None
+        self.RGBPixels = None
+        self.ExtraData = dict()
+        self.ExtraDataInt = dict()
+        self.ExtraDataString = dict()
+        
+        self._BandCompressionModeObject = None
+        self._QuantificationParametersObject = None
 
-        if len(bandIndexesToUse) != 0:
-            utils.checkIfbandIndexesToUseIsValid(bandIndexesToUse, self.Bands)
+        if config.get_backend() == "clr":
+            self._init_clr(path, bandIndexesToUse, ifSkipReadingAllLayers, ifSkipReadingFreehandLayer)
+        else:
+            self._init_python(path, bandIndexesToUse, ifSkipReadingAllLayers, ifSkipReadingFreehandLayer)
 
+    def _init_clr(self, path, bandIndexesToUse, ifSkipReadingAllLayers, ifSkipReadingFreehandLayer):
+        from videometer import vm_utils_clr
+        import VM.Image.IO as VMImIO
+        import VM.Image as VMIm
+        import clr
+        
         VMImageObject = VMImIO.HipsIO.LoadImage(path)
-        self.PixelValues = utils.vmImage2npArray(VMImageObject)
+        self.PixelValues = vm_utils_clr.vmImage2npArray(VMImageObject)
 
         (self.Height, self.Width, self.Bands) = self.PixelValues.shape
 
@@ -174,10 +170,10 @@ class ImageClass:
         self.BandNames = np.array(
             [str(bandname) for bandname in VMImageObject.BandNames]
         )
-        self.Illumination = utils.illuminationObjects2List(VMImageObject.Illumination)
-        self.WaveLengths = utils.asNumpyArray(VMImageObject.WaveLengths)
-        self.StrobeTimes = utils.asNumpyArray(VMImageObject.StrobeTimes)
-        self.StrobeTimesUniversal = utils.asNumpyArray(
+        self.Illumination = vm_utils_clr.illuminationObjects2List(VMImageObject.Illumination)
+        self.WaveLengths = vm_utils_clr.asNumpyArray(VMImageObject.WaveLengths)
+        self.StrobeTimes = vm_utils_clr.asNumpyArray(VMImageObject.StrobeTimes)
+        self.StrobeTimesUniversal = vm_utils_clr.asNumpyArray(
             VMImageObject.StrobeTimesUniversal
         )
 
@@ -188,88 +184,105 @@ class ImageClass:
         self.Description = VMImageObject.Description
         self.ImageFileName = os.path.basename(path)
         self.FullPathToImage = os.path.abspath(path)
-        self.FreehandLayers = None
-        self.ForegroundPixels = None
-        self.DeadPixels = None
-        self.SaturatedPixels = None
-        self.CorrectedPixels = None
-        self.RGBPixels = None
 
-        self.ExtraData = dict()
         for i in VMImageObject.ExtraData.Keys:
             self.ExtraData[i] = VMImageObject.ExtraData[i]
 
-        self.ExtraDataInt = dict()
         for i in VMImageObject.ExtraDataInt.Keys:
             self.ExtraDataInt[i] = VMImageObject.ExtraDataInt[i]
 
-        self.ExtraDataString = dict()
         for i in VMImageObject.ExtraDataString.Keys:
             self.ExtraDataString[i] = VMImageObject.ExtraDataString[i]
 
         if not ifSkipReadingAllLayers:
-            self._ReadAllImageLayers(VMImageObject, ifSkipReadingFreehandLayer)
+            self._ReadAllImageLayers_clr(VMImageObject, ifSkipReadingFreehandLayer)
 
         if len(bandIndexesToUse) != 0:
             self.reduceBands(bandIndexesToUse)
 
-    def _ReadAllImageLayers(self, VMImageObject, ifSkipReadingFreehandLayer):
-        """Calls _ReadFreehand, _ReadCorrected, _ReadForeground, _ReadDead and _ReadSaturated.
-        This method is called when initializing the class.
+    def _init_python(self, path, bandIndexesToUse, ifSkipReadingAllLayers, ifSkipReadingFreehandLayer):
+        from videometer.hips_core import HipsImage
+        
+        img = HipsImage.read(path)
+        self.PixelValues = img.pixels
+        self.Height = img.height
+        self.Width = img.width
+        self.Bands = img.bands
+        self.BandNames = np.array(img.band_names)
+        self.Illumination = np.array(img.illumination_names)
+        self.WaveLengths = img.wavelengths
+        self.StrobeTimes = img.strobe_times
+        self.StrobeTimesUniversal = img.strobe_times_universal
+        
+        self.MmPixel = img.mm_pixel
+        self.History = img.history
+        self.Description = img.description
+        self.ImageFileName = os.path.basename(path)
+        self.FullPathToImage = os.path.abspath(path)
+        
+        self.ExtraData = img.extra_data.copy()
+        self.ExtraDataInt = img.extra_data_int.copy()
+        self.ExtraDataString = img.extra_data_string.copy()
+        
+        # Quantification parameters in python backend are stored in the HipsImage object
+        # we don't have a direct equivalent of the CLR _QuantificationParametersObject 
+        # but we can store them if needed. For now, let's just keep them in HipsImage.
+        self._python_hips_image = img 
 
-        ifSkipReadingFreehandLayer : If set to True it will skip reading all the Freehand Layers.
-                                Makes the reading quicker.
+        # TODO: Implement layer reading in hips_core if needed
+        if not ifSkipReadingAllLayers:
+             # hips_core currently doesn't support all layers (Corrected, Dead, etc.)
+             # but we can at least handle what it has
+             pass
 
-        Parameters: None
+        if len(bandIndexesToUse) != 0:
+            self.reduceBands(bandIndexesToUse)
 
-        Output : No outputs."""
-
+    def _ReadAllImageLayers_clr(self, VMImageObject, ifSkipReadingFreehandLayer):
+        from videometer import vm_utils_clr
+        import VM.Image as VMIm
+        
         getImageLayer = VMIm.ImageLayerExtensions.GetImageLayer
 
         # Freehand Layer
         if not ifSkipReadingFreehandLayer:
-            self._ReadFreehand(VMImageObject.FreehandLayersXML)
+            self._ReadFreehand_clr(VMImageObject.FreehandLayersXML)
 
         # CorrectedPixels
-        self.CorrectedPixels = utils.imageLayer2npArray(
+        self.CorrectedPixels = vm_utils_clr.imageLayer2npArray(
             getImageLayer(VMImageObject, "CorrectedPixels")
         )
 
         # DeadPixels
-        self.DeadPixels = utils.imageLayer2npArray(
+        self.DeadPixels = vm_utils_clr.imageLayer2npArray(
             getImageLayer(VMImageObject, "DeadPixels")
         )
 
         # Attempt to load foreground pixels from blob image
-        from VM.Blobs import BlobImage
         try:
+            from VM.Blobs import BlobImage
             blobImage = BlobImage.CreateFromXmlAndCreateMaskImage(VMImageObject.History, VMImageObject.ImageWidth, VMImageObject.ImageHeight)
             VMIm.ForegroundPixelsLayerHelperMethods.SetForegroundPixelsImageLayer(VMImageObject, blobImage.MaskImage)
         except:
             pass
 
         # ForegroundPixels
-        self.ForegroundPixels = utils.imageLayer2npArray(
+        self.ForegroundPixels = vm_utils_clr.imageLayer2npArray(
             getImageLayer(VMImageObject, "ForegroundPixels")
         )
 
         # SaturatedPixels
-        self.SaturatedPixels = utils.imageLayer2npArray(
+        self.SaturatedPixels = vm_utils_clr.imageLayer2npArray(
             getImageLayer(VMImageObject, "SaturatedPixels")
         )
 
-    def _ReadFreehand(self, freehandLayersXMLstring):
-        """Reads FreehandLayers layers of the image. Updates 'FreehandLayers' attribute.
-        The method is called when initializing the class.
-
-        Parameters: None
-
-        Output: No direct outputs, it updates 'FreehandLayers' attribute, if at least
-        one layer has been found."""
-
-        # Would be easier to Get image with the help of VM.Image.IO
-        # vmImg = VMImIO.FreehandLayerIO.GetMaskFromFreehandLayerXmlString(VMImageObject, container.layerId)
-        # but for some reason throws a SystemOutOfMemory exception
+    def _ReadFreehand_clr(self, freehandLayersXMLstring):
+        from videometer import vm_utils_clr
+        import VM.FreehandLayer as VMFreehand
+        import clr
+        import System.IO
+        import System.Drawing
+        
         freehandLayersIO = VMFreehand.FreehandLayerIO.DeserializeFromString(
             freehandLayersXMLstring
         )
@@ -278,10 +291,9 @@ class ImageClass:
 
         freehandLayerList = []
         for container in freehandLayersIO.containers:
-            # FreehandLayerIOContainer.pixels to npArray
-            ms = clr.System.IO.MemoryStream(container.pixels)
-            bitmap = clr.System.Drawing.Bitmap(ms)
-            npArray = utils.systemDrawingBitmap2npArray(bitmap)
+            ms = System.IO.MemoryStream(container.pixels)
+            bitmap = System.Drawing.Bitmap(ms)
+            npArray = vm_utils_clr.systemDrawingBitmap2npArray(bitmap)
 
             if len(npArray.shape) == 3:
                 npArray = npArray[:, :, 0]
@@ -316,7 +328,14 @@ class ImageClass:
         Output :
             returns the sRGB image and updates the "RGBPixels" attribute"""
 
-        SpectraNamesLUT = utils.get_SpectraNamesLUP()
+        if config.get_backend() == "python":
+            # hips_core doesn't have to_sRGB yet.
+            raise NotImplementedError("to_sRGB is not yet implemented for the 'python' backend.")
+
+        from videometer import vm_utils_clr
+        import VM.Image.ViewTransforms as VMImTransForms
+        
+        SpectraNamesLUT = vm_utils_clr.get_SpectraNamesLUP()
         if not (spectraName in SpectraNamesLUT):
             raise NotImplementedError(
                 'spectraName="'
@@ -346,7 +365,7 @@ class ImageClass:
                 "Image class needs to have 3 or more wavelengths on the visable spectrum (380mm <= wavelength <= 780mm). Number of visable wavelength in ImageClass : "
                 + str(np.sum(visibleBands))
             )
-        VMImageObject = utils.npArray2VMImage(self.PixelValues[:, :, visibleBands])
+        VMImageObject = vm_utils_clr.npArray2VMImage(self.PixelValues[:, :, visibleBands])
 
         # Add attributes that are checked in IsValidFor()
         VMImageObject.AddToHistory(self.History)
@@ -363,7 +382,7 @@ class ImageClass:
 
         # Convert to sRGB image
         bitmap = converter.GetBitmap(VMImageObject, SpectraNamesLUT[spectraName])
-        srgbImage = utils.systemDrawingBitmap2npArray(bitmap).astype(np.uint8)
+        srgbImage = vm_utils_clr.systemDrawingBitmap2npArray(bitmap).astype(np.uint8)
 
         imrgb = np.empty_like(srgbImage)
         if useMask:
@@ -414,14 +433,20 @@ class ImageClass:
         self.Illumination = self.Illumination[bandIndexesToUse]
         self.StrobeTimesUniversal = self.StrobeTimesUniversal[bandIndexesToUse]
 
-        if self._QuantificationParametersObject is None:
-            return
-        tmp = clr.System.Array.CreateInstance(
-            VMIm.Compression.QuantificationParameters, len(bandIndexesToUse)
-        )
-        for i, bandIndexToUse in enumerate(bandIndexesToUse):
-            tmp[i] = self._QuantificationParametersObject[bandIndexToUse]
-        self._QuantificationParametersObject = tmp
+        if config.get_backend() == "clr":
+            import clr
+            import VM.Image as VMIm
+            if self._QuantificationParametersObject is None:
+                return
+            tmp = clr.System.Array.CreateInstance(
+                VMIm.Compression.QuantificationParameters, len(bandIndexesToUse)
+            )
+            for i, bandIndexToUse in enumerate(bandIndexesToUse):
+                tmp[i] = self._QuantificationParametersObject[bandIndexToUse]
+            self._QuantificationParametersObject = tmp
+        else:
+            if hasattr(self, '_python_hips_image'):
+                self._python_hips_image.reduce_bands(list(bandIndexesToUse))
 
     @staticmethod
     def from_bytes(bytes) -> "ImageClass":
@@ -514,6 +539,58 @@ def write(image, path, compression="SameAsImageClass", verbose=False):
             "The folder structure not found under " + path + " : " + folderPath
         )
 
+    if config.get_backend() == "python":
+        return _write_python(image, path, compression, verbose)
+    else:
+        return _write_clr(image, path, compression, verbose)
+
+def _write_python(image, path, compression, verbose):
+    from videometer.hips_core import HipsImage, COMPRESSION_PRESETS
+    
+    if isinstance(image, np.ndarray):
+        img_obj = HipsImage()
+        img_obj.pixels = image
+    elif isinstance(image, ImageClass):
+        img_obj = HipsImage()
+        img_obj.pixels = image.PixelValues
+        img_obj.history = image.History
+        img_obj.description = image.Description
+        img_obj.mm_pixel = image.MmPixel
+        img_obj.band_names = list(image.BandNames)
+        img_obj.wavelengths = image.WaveLengths
+        img_obj.strobe_times = image.StrobeTimes
+        img_obj.strobe_times_universal = image.StrobeTimesUniversal
+        
+        # Mapping illumination names back to IDs
+        from videometer.hips_core import ILLUMINATION_TYPES
+        reverse_illum = {v: k for k, v in ILLUMINATION_TYPES.items()}
+        img_obj.illumination = np.array([reverse_illum.get(name, 0) for name in image.Illumination])
+        
+        img_obj.extra_data = image.ExtraData.copy()
+        img_obj.extra_data_int = image.ExtraDataInt.copy()
+        img_obj.extra_data_string = image.ExtraDataString.copy()
+        
+    else:
+        raise TypeError("Image input has to be either ImageClass object or 3-D NumPy array")
+
+    if compression == "SameAsImageClass":
+        compression = None
+        
+    img_obj.write(path, compression)
+    
+    if os.path.isfile(path):
+        fullPath = os.path.abspath(path)
+        if verbose:
+            print("HIPS image successfully written (python backend) in " + fullPath)
+        return fullPath
+    return None
+
+def _write_clr(image, path, compression, verbose):
+    from videometer import vm_utils_clr
+    import VM.Image as VMIm
+    import VM.Image.IO as VMImIO
+    import clr
+    
     if (type(image) == np.ndarray) and (len(image.shape) == 3):
         imagearr = image
         if compression == "SameAsImageClass":
@@ -582,7 +659,7 @@ def write(image, path, compression="SameAsImageClass", verbose=False):
         )
 
     if compression != "SameAsImageClass":
-        compressionLUT = utils.get_CompressionAndQuantificationPresetLUT()
+        compressionLUT = vm_utils_clr.get_CompressionAndQuantificationPresetLUT()
 
         if not compression in compressionLUT:
             listOfValid = list(compressionLUT.keys())
@@ -613,7 +690,7 @@ def write(image, path, compression="SameAsImageClass", verbose=False):
         bandCompressionMode = image._BandCompressionModeObject
         quantificationParameters = image._QuantificationParametersObject
 
-    Image_net = utils.npArray2VMImage(imagearr)
+    Image_net = vm_utils_clr.npArray2VMImage(imagearr)
 
     if type(image) == ImageClass:
         # NOTE - DO NOT REMOVE THE CASTING TO THE TYPES str(),float(),int()
@@ -631,7 +708,7 @@ def write(image, path, compression="SameAsImageClass", verbose=False):
         Image_net.AddToHistory(str(image.History))
         Image_net.MmPixel = float(image.MmPixel)
 
-        illuminations_objects = utils.illuminationList2Objects(image.Illumination)
+        illuminations_objects = vm_utils_clr.illuminationList2Objects(image.Illumination)
         for i in range(image.Bands):
             Image_net.WaveLengths[i] = float(image.WaveLengths[i])
             Image_net.StrobeTimes[i] = int(image.StrobeTimes[i])
@@ -646,7 +723,7 @@ def write(image, path, compression="SameAsImageClass", verbose=False):
         for k, v in image.ExtraDataString.items():
             Image_net.ExtraDataString[k] = str(v)
 
-        Image_net = utils.addAllAvailableImageLayers(Image_net, image)
+        Image_net = vm_utils_clr.addAllAvailableImageLayers(Image_net, image)
 
     VMImIO.HipsIO.SaveImage(Image_net, str(path))
 
@@ -690,13 +767,13 @@ def show(image, ifUseMask=False, bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
         the function, and on its own, it has no value for the user. Therefore,
         it is excluded from documentation."""
 
-    if (type(image) != ImageClass) or (
+    if (type(image) != ImageClass) and not (
         type(image) == np.ndarray and len(image.shape) == 3
     ):
         raise TypeError("image needs to be a ImageClass object or 3-D numpy array")
 
     if type(image) == ImageClass:
-        imagearr = image.PixelValues
+        imagearr = image.PixelValues.copy()
         if ifUseMask:
             if image.ForegroundPixels is None:
                 raise AttributeError("ForegroundPixels attribute not set")
@@ -785,8 +862,14 @@ def readOnlyPixelValues(path):
     if not path.endswith(".hips"):
         raise TypeError("File name has to have the .hips extension")
 
-    VMImageObject = VMImIO.HipsIO.LoadImage(path)
-    npArray = utils.vmImage2npArray(VMImageObject)
-    VMImageObject.Free()
-
-    return npArray
+    if config.get_backend() == "python":
+        from videometer.hips_core import HipsImage
+        img = HipsImage.read(path)
+        return img.pixels
+    else:
+        import VM.Image.IO as VMImIO
+        from videometer import vm_utils_clr
+        VMImageObject = VMImIO.HipsIO.LoadImage(path)
+        npArray = vm_utils_clr.vmImage2npArray(VMImageObject)
+        VMImageObject.Free()
+        return npArray
