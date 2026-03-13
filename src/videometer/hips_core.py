@@ -655,7 +655,10 @@ class HipsImage:
     def write(self, path: str, compression: Optional[str] = None):
         """
         Writes the HIPS image (header and data) to a file.
-        If compression is None, it attempts to use the current self.format.
+        
+        Data Parity Adjustments:
+        1. Quantization Promotion: If quantified but RAW, promote to GZIP (GZ).
+           Legacy Oracle returns all-zeros if Quantification is present but mode is RAW.
         """
         if self._pixels is None:
             self.load_pixels()
@@ -686,21 +689,31 @@ class HipsImage:
             if self.format == HipsFormat.PFBYTE and self._pixels.dtype == np.float32:
                 self.format = HipsFormat.PFFLOAT
 
+        # Enforcement: Quantization requires compression for Legacy Oracle de-quantization paths
+        is_quantized = self._quantization_parameters is not None
+        if is_quantized and not (self.format & 0x380): # If RAW but quantified
+            # Promote to PFBYTE_GZ or PFSHORT_GZ based on bit depth
+            q_max_bits = max(qp.Q for qp in self._quantization_parameters)
+            if q_max_bits <= 8:
+                self.format = HipsFormat.PFBYTE_GZ
+            else:
+                self.format = HipsFormat.PFSHORT_GZ
+
+        actual_format = self.format & 0x7F
         is_gz = bool(self.format & 0x80)
         is_jpg = bool(self.format & 0x100)
         is_png = bool(self.format & 0x200)
         is_chunked = is_gz or is_jpg or is_png
-        is_quantized = self._quantization_parameters is not None
         
         if is_png:
             encoder = PngEncoder()
         elif is_jpg:
             encoder = JpegEncoder()
         elif is_gz:
-            dtype = np.uint8 if is_quantized else (np.float32 if (self.format & 0x7F) == HipsFormat.PFFLOAT else np.uint8)
+            dtype = np.uint8 if is_quantized else (np.float32 if actual_format == HipsFormat.PFFLOAT else np.uint8)
             encoder = GzipEncoder(dtype)
         else:
-            dtype = np.uint8 if is_quantized else (np.float32 if (self.format & 0x7F) == HipsFormat.PFFLOAT else np.uint8)
+            dtype = np.uint8 if is_quantized else (np.float32 if actual_format == HipsFormat.PFFLOAT else np.uint8)
             encoder = RawEncoder(dtype)
 
         with open(path, 'wb') as f:
@@ -752,7 +765,7 @@ class HipsImage:
         xml += '<ArrayOfQuantificationParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
         
         for qp in self._quantization_parameters:
-            # Format floats to 6 decimal places to ensure stability across cultures
+            # Format floats to remove .0 for integers, ensuring better culture compatibility
             q_min = f"{qp.Q_Min:g}"
             q_max = f"{qp.Q_Max:g}"
             xml += f'  <QuantificationParameters Q_Min="{q_min}" Q_Max="{q_max}" Q="{qp.Q}" />\n'
