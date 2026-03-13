@@ -209,7 +209,11 @@ class HipsImage:
         return [ILLUMINATION_TYPES.get(int(i), "NA") for i in self.illumination]
 
     def reduce_bands(self, indexes: List[int]):
-        """Reduces the image to only the specified band indexes."""
+        """Reduces the image to only the specified band indexes.
+
+        Args:
+            indexes (List[int]): List of band indexes to keep.
+        """
         if self._pixels is None:
             self.load_pixels()
             
@@ -230,7 +234,16 @@ class HipsImage:
             self._quantization_parameters = [self._quantization_parameters[i] for i in indexes]
 
     def load_pixels(self):
-        """Loads the pixel data from the file."""
+        """Loads the pixel data from the file.
+
+        This method is called lazily when the `pixels` property is accessed.
+        It reads the binary data from the HIPS file, handles decompression
+        (GZIP, PNG, JPEG), and performs de-quantization if necessary.
+
+        Raises:
+            ValueError: If no file path is associated with this HipsImage.
+            EOFError: If the file ends unexpectedly.
+        """
         if not self._path:
             raise ValueError("No file path associated with this HipsImage.")
             
@@ -374,14 +387,31 @@ class HipsImage:
 
     @classmethod
     def read(cls, path: str) -> 'HipsImage':
-        """Reads a HIPS file (header and prepares for lazy pixel loading)."""
+        """Reads a HIPS file (header and prepares for lazy pixel loading).
+
+        Args:
+            path (str): Path to the .hips file.
+
+        Returns:
+            HipsImage: An initialized HipsImage object.
+        """
         img = cls.read_header(path)
         img._path = path
         return img
 
     @classmethod
     def read_header(cls, path: str) -> 'HipsImage':
-        """Reads the HIPS header from a file."""
+        """Reads the HIPS header from a file without loading pixel data.
+
+        Args:
+            path (str): Path to the .hips file.
+
+        Returns:
+            HipsImage: A HipsImage object with metadata initialized.
+
+        Raises:
+            ValueError: If the file is not a valid HIPS image.
+        """
         with open(path, 'rb') as f:
             def read_next_val():
                 while True:
@@ -618,7 +648,11 @@ class HipsImage:
             self._parse_quantization(str(arr), is_legacy=True)
 
     def _write_to_handle(self, f):
-        """Internal helper to write header to an open file handle."""
+        """Internal helper to write the HIPS header to an open file handle.
+
+        Args:
+            f (io.BufferedWriter): Open file handle in binary write mode.
+        """
         f.write(b"HIPS\n")
         f.write(b"\n") # onm
         f.write(b"\n") # snm
@@ -648,17 +682,24 @@ class HipsImage:
         self._write_x_params(f)
 
     def write_header(self, path: str):
-        """Writes only the header to a file."""
+        """Writes only the HIPS header to a file.
+
+        Args:
+            path (str): Target file path.
+        """
         with open(path, 'wb') as f:
             self._write_to_handle(f)
 
     def write(self, path: str, compression: Optional[str] = None):
-        """
-        Writes the HIPS image (header and data) to a file.
-        
-        Data Parity Adjustments:
-        1. Quantization Promotion: If quantified but RAW, promote to GZIP (GZ).
-           Legacy Oracle returns all-zeros if Quantification is present but mode is RAW.
+        """Writes the HIPS image (header and pixel data) to a file.
+
+        This method handles compression presets and ensures compatibility with
+        the legacy Videometer Oracle by promoting certain formats if necessary.
+
+        Args:
+            path (str): Target file path.
+            compression (str, optional): Compression preset name (e.g., 'Uncompressed',
+                'HighQuality', 'VeryHighCompression'). If None, uses current `format`.
         """
         if self._pixels is None:
             self.load_pixels()

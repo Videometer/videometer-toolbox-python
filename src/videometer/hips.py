@@ -7,98 +7,33 @@ from videometer import vm_utils as utils
 from videometer import config
 
 class ImageClass:
-    """Attributes:
-    --------------
-    PixelValues - NumPy array (3-D)
-        Contains float pixel values of the HIPS image. Shape of the array is
-        (height, width, bands).
+    """A class representing a Videometer HIPS image.
 
-    Height - int
-        Height of the HIPS image.
+    This class provides an interface to access image data, metadata, and perform
+    common operations like band reduction and sRGB conversion. It supports both
+    'clr' and 'python' backends for reading and writing files.
 
-    Width - int
-        Width of the HIPS image.
-
-    MmPixel - float
-        physical size of each pixel in mm.
-
-    Bands - int
-        Number of bands in the image.
-
-    BandNames - NumPy array of strings (1-D)
-        List of names of the bands.
-
-    WaveLengths - NumPy array of floats (1-D)
-        Contains wavelenghts of the bands in HIPS image.
-
-    Description - string
-        Description set of the image
-
-    History - string
-        Explains the history of the image.
-
-    Illumination – NumPy array of strings (1-D)
-        List of Illumination of each band.
-
-    StrobeTimes – NumPy array of int32 (1-D)
-        Strobe time of each band in the image.
-
-    StrobeTimesUniversal - NumPy array of floats (1-D)
-        Universal strobe time of every band in the image.
-
-    FreehandLayers – List of dictionaries
-        Each set FreehandLayer is a dictionary (hashmap) with the following keys :
-            {
-                "name" : (string) name of the layer f.x. Layer 1
-                "layerId" : (int) ID of the layer
-                "description" : (string) Description set
-                "pixels" :  (2D numpy array with 0.0 and 1.0) pixel mask
-            }
-
-    RGBPixels – NumPy array (height, width, 3)
-        Array representing sRGB pixel values of the image. The values have to be
-        manually initialized using To_sRGB method.
-
-    ForegroundPixels – NumPy array (2-D)
-        Foreground mask of the image given as a binary 2-D numpy array. If no foreground
-        pixels exist on the image, the value of this attribute is given as None.
-
-    DeadPixels – NumPy array (2-D)
-        Dead pixels of the image given as a binary 2-D numpy arra. If no foreground
-        pixels exist on the image, the value of this attribute is given as None.
-
-    CorrectedPixels – NumPy array (2-D)
-        Corrected pixels of the image given as a binary 2-D numpy arra. If no foreground
-        pixels exist on the image, the value of this attribute is given as None.
-
-    SaturatedPixels – NumPy array (2-D)
-        Saturated pixels of the image given as a binary 2-D numpy arra. If no foreground
-        pixels exist on the image, the value of this attribute is given as None.
-
-    ExtraData – dictionary
-        Contains additional information about the image (e.g. temperature
-        data and similar). Given as dictionary.
-
-    ExtraDataInt – dictionary
-        Contains additional information about the image (e.g. temperature
-        data and similar). Given as dictionary.
-
-    ExtraDataString – dictionary
-        Contains additional information about the image (e.g. temperature
-        data and similar). Given as dictionary.
-
-
-    Methods:
-    ---------
-    init(image_array, image_object, bandIndexesToUse=[])
-        Initializes the class. Called when reading an image.
-
-    To_sRGB(bandIndexesToUse=[])
-        Performs conversion of the spectral image to sRGB image. Updates
-        'RGBPixels' attribute.
-
-    reduceBands(bandIndexesToUse)
-        Reduces bands of the image. The bands that will remain are given by bandIndexesToUse.
+    Attributes:
+        PixelValues (np.ndarray): 3-D NumPy array of pixel values (height, width, bands).
+        Height (int): Image height.
+        Width (int): Image width.
+        Bands (int): Number of spectral bands.
+        MmPixel (float): Physical size of each pixel in millimeters.
+        BandNames (np.ndarray): 1-D array of band names.
+        WaveLengths (np.ndarray): 1-D array of wavelengths.
+        Illumination (np.ndarray): 1-D array of illumination names for each band.
+        StrobeTimes (np.ndarray): 1-D array of strobe times.
+        History (str): History log of the image.
+        Description (str): Description of the image.
+        FreehandLayers (List[dict]): List of freehand annotation layers.
+        RGBPixels (np.ndarray): sRGB representation of the image (after calling `to_sRGB`).
+        ForegroundPixels (np.ndarray, optional): Binary mask for foreground pixels.
+        DeadPixels (np.ndarray, optional): Binary mask for dead pixels.
+        CorrectedPixels (np.ndarray, optional): Binary mask for corrected pixels.
+        SaturatedPixels (np.ndarray, optional): Binary mask for saturated pixels.
+        ExtraData (dict): Dictionary for numeric extra metadata.
+        ExtraDataInt (dict): Dictionary for integer extra metadata.
+        ExtraDataString (dict): Dictionary for string extra metadata.
     """
 
     def __init__(
@@ -108,20 +43,13 @@ class ImageClass:
         ifSkipReadingAllLayers=False,
         ifSkipReadingFreehandLayer=False,
     ):
-        """Initializes the class. Called when reading an image.
-        Parameters:
-        -----------
-        path : string
-            Path to the image that will be stored as an object of ImageClass.
+        """Initializes an ImageClass object by reading a HIPS file.
 
-        bandIndexesToUse : Optional argument, give a list or numpy array of band indexes
-
-        ifSkipReadingAllLayers : Optional argument, If set to True it will skip reading all the Image Layers.
-                                Makes the reading quicker. Default is False.
-
-        ifSkipReadingFreehandLayer : Optional argument, If set to True it will skip reading all the Freehand Layers.
-                                Makes the reading quicker. Default is False.
-
+        Args:
+            path (str): Path to the .hips file.
+            bandIndexesToUse (List[int], optional): Bands to load.
+            ifSkipReadingAllLayers (bool, optional): Skip metadata masks.
+            ifSkipReadingFreehandLayer (bool, optional): Skip freehand layers.
         """
         self.PixelValues = None
         self.Height = 0
@@ -470,25 +398,23 @@ def read(
 ):
     """Reads a HIPS image and stores it as an ImageClass object.
 
-    Parameters:
-    -----------
-    path - string
-        Full path to the image that wants to be read.
+    Args:
+        path (str): Full path to the .hips image.
+        bandIndexesToUse (List[int], optional): List of band indexes to read.
+            If empty, all bands are read.
+        ifSkipReadingAllLayers (bool, optional): If True, skip reading metadata layers
+            like CorrectedPixels, DeadPixels, etc. Defaults to False.
+        ifSkipReadingFreehandLayer (bool, optional): If True, skip reading Freehand layers.
+            Defaults to False.
 
-    bandIndexesToUse - list or numpy array of integers
-        Additional argument if only certain bands of the image want to be read.
+    Returns:
+        ImageClass: An initialized ImageClass object.
 
-    ifSkipReadingAllLayers : Optional argument, If set to True it will skip reading all the Image Layers.
-                                Makes the reading quicker. Default is False.
-
-    ifSkipReadingFreehandLayer : Optional argument, If set to True it will skip reading all the Freehand Layers.
-                                Makes the reading quicker. Default is False.
-
-    Outputs:
-    --------
-    image - ImageClass object
-        An object of ImageClass. The object will be initialized using init()
-        method of the ImageClass."""
+    Raises:
+        TypeError: If path is not a string.
+        ValueError: If path doesn't end with .hips.
+        FileNotFoundError: If the file doesn't exist.
+    """
 
     if type(path) != str:
         raise TypeError("path needs to be of type str")
@@ -503,33 +429,25 @@ def read(
 
 
 def write(image, path, compression="SameAsImageClass", verbose=False):
-    """Writes a HIPS image from an ImageClass object or a NumPy array that
-    corresponds to the pixel values of a spectral image.
+    """Writes a HIPS image from an ImageClass object or a NumPy array.
 
-    Parameters:
-    -----------
-    image - ImageClass object or NumPy array (3-D)
+    Args:
+        image (ImageClass or np.ndarray): The image data to write.
+        path (str): Target file path (must end in .hips).
+        compression (str, optional): Compression level. One of:
+            'SameAsImageClass', 'Uncompressed', 'VeryHighQuality',
+            'HighQuality', 'HighCompression', 'VeryHighCompression'.
+            Defaults to 'SameAsImageClass'.
+        verbose (bool, optional): If True, print status messages. Defaults to False.
 
-    path - string
-        path of the HIPS file that will be created by the function. It has to
-        include .hips extension.
+    Returns:
+        str: Absolute path to the written file if successful, else None.
 
-    compression - string
-        Level of compression :
-            {
-                "SameAsImageClass" : Keep the same compression as is on the imageClass (if it is a numpy array then it will be Uncompressed) ,
-                "Uncompressed" : No compression, (Is marked as ORIGINAL in VideometerLab software),
-                "VeryHighQuality" : (see VideometerLab software),
-                "HighQuality" : (see VideometerLab software),
-                "HighCompression" : (see VideometerLab software),
-                "VeryHighCompression" : (see VideometerLab software)
-            }
-
-    verbose - bool
-        If true then prints out the name of the file otherwise not
-        Default is false
-
-    Outputs : Returns the path if successful otherwise None."""
+    Raises:
+        TypeError: If path doesn't end in .hips or image type is invalid.
+        FileNotFoundError: If the target directory doesn't exist.
+        ValueError: If layer dimensions don't match pixel data.
+    """
 
     if not (path.endswith(".hips")):
         raise TypeError("File needs to contain the .hips extension :" + path)
@@ -741,31 +659,20 @@ def _write_clr(image, path, compression, verbose):
 
 
 def show(image, ifUseMask=False, bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=False):
-    """Function that shows individual bands of the image. By default it
-    displays all the bands, but if only certain bands want to be ploted, assign
-    bands as a list or integer.
+    """Function that shows individual bands of the image.
 
-    Parameters:
-    -----------
-    image - ImageClass object or NumPy array (3-D)
+    Args:
+        image (ImageClass or np.ndarray): Image data to display.
+        ifUseMask (bool, optional): If True, apply the foreground mask.
+            Only works if image is an ImageClass object. Defaults to False.
+        bandIndexesToUse (List[int], optional): List of band indexes to show.
+            If empty, all bands are shown. Defaults to [].
+        ifOnlyGetListOfPLTObjects (bool, optional): If True, return the matplotlib
+            AxesImage objects instead of calling plt.show(). Defaults to False.
 
-    ifUseMask - boolean
-        If set to true and mask is set on the ImageClass object
-        then the image will show masked otherwise it won't.
-
-    bandIndexesToUse - list
-        Optional argument that corresponds to the bands that want to be shown.
-
-    ifOnlyGetListOfPLTObjects - boolean
-        Optional argument to only get a list of the matplotlib.image.AxesImage objects
-        instead of using matplotlib.show
-
-    Outputs:
-    --------
-    plt_outputs - list
-        List of matplotlib.image.AxesImage objects. This list is used to test
-        the function, and on its own, it has no value for the user. Therefore,
-        it is excluded from documentation."""
+    Returns:
+        List[matplotlib.image.AxesImage]: List of matplotlib image objects.
+    """
 
     if (type(image) != ImageClass) and not (
         type(image) == np.ndarray and len(image.shape) == 3
@@ -812,24 +719,18 @@ def show(image, ifUseMask=False, bandIndexesToUse=[], ifOnlyGetListOfPLTObjects=
 
 
 def showRGB(img, ifUseMask=False):
-    """Function that shows srgb representation of the image. If ifUseForegroundMask is
-        set to true then the image will be shown masked.
+    """Function that shows sRGB representation of the image.
 
-    Parameters:
-    -----------
-    image - ImageClass object.
+    Note: This currently requires the 'clr' backend.
 
-    ifUseMask - boolean
-        To toggle mask on or off if set on the ImageClass object
+    Args:
+        img (ImageClass): The image object to display.
+        ifUseMask (bool, optional): If True, apply the foreground mask.
+            Defaults to False.
 
-
-    Outputs:
-    --------
-    plt_outputs - matplotlib.image.AxesImage
-        A matplotlib.image.AxesImage object. This object is used to test
-        the function, and on its own, it has no value for the user. Therefore,
-        it is excluded from documentation. The same will apply for the remaining
-        show functions."""
+    Returns:
+        matplotlib.image.AxesImage: The matplotlib image object.
+    """
 
     if type(img) != ImageClass:
         raise TypeError("imageClass needs to be a ImageClass object")
@@ -845,16 +746,13 @@ def showRGB(img, ifUseMask=False):
 
 
 def readOnlyPixelValues(path):
-    """Function that reads the HIPS image and returns its pixel values
+    """Function that reads the HIPS image and returns only its pixel values.
 
-    Parameters:
-    -----------
-    path - path to the .hips image
+    Args:
+        path (str): Full path to the .hips image.
 
-
-    Outputs:
-    --------
-    Returns a 3-D numpy float array.
+    Returns:
+        np.ndarray: A 3-D NumPy array of pixel values.
     """
     if not os.path.isfile(path):
         raise FileNotFoundError(path)
