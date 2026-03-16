@@ -1,5 +1,6 @@
 __pycache__/
 dist/
+docs/build/
 *videometer.egg-info/
 .vscode/
 src/videometer/DLLs*
