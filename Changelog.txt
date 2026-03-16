@@ -1,3 +1,9 @@
+Version 1.0.7
+- Introduce utility for clearing DLL downloads
+
+Version 1.0.6
+- Fix packaged DLLs
+
 Version 1.0.5
 - Fix packaged DLLs
 
