@@ -10,3 +10,4 @@ src/videometer/tests/TestImages/TestImagesWriting/*
 .hypothesis
 myenv/
 **/.venv/**
+*.cs
