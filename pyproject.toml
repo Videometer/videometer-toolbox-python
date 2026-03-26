@@ -9,7 +9,7 @@ requires = [
 
 [project]
 name = "videometer"
-version = "2,0.1"
+version = "2.0.1"
 authors = [ { "name"="Videometer A/S" } ]
 maintainers = [
     {"name"="Aske", "email"="asc@videometer.com" }]
