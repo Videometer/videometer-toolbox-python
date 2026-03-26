@@ -1,3 +1,7 @@
+Version 2.0.1
+- Change BlobDatabse such that it also support version 7, since in the python version 6 and 7 are equivalent. The change to version 7 does not make a differents
+for the python package. 
+
 Version 2.0.0
 - Introduce support for Linux using new Python-based backend
 
