@@ -56,8 +56,8 @@ class BlobDatabase:
                 version_value = row[0]
                 
                 # Compare as string since the schema defines value as TEXT
-                if version_value != '6':
-                    raise ValueError(f"Unsupported database version: {version_value}. Expected version 6.")
+                if version_value not in ['6', '7']:
+                    raise ValueError(f"Unsupported database version: {version_value}. Expected version 6 or 7.")
                     
         except sqlite3.OperationalError as e:
             # Handle cases where metadata_t table might not exist at all
