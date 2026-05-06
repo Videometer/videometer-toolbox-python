@@ -16,6 +16,11 @@ def unblockDLLs(path2dlls):
 
 
 def setupDlls():
+    if os.path.isdir(os.path.join(PATHVM, "DLLs")):
+        return
+
+    print("DLLs missing!")
+
     # Get the zip of DLLs
     path2zip = os.path.join(PATHVM, "DLLs.zip")
     path2GithubZip = r"https://github.com/Videometer/videometer-toolbox-python/raw/main/src/videometer/DLLs.zip?download="

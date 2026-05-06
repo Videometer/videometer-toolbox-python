@@ -5,6 +5,7 @@ import ctypes
 from PIL import Image
 import tempfile
 import numbers
+from videometer.setup_helper import setupDlls
 
 VMPATH = os.path.dirname(os.path.abspath(__file__))
 DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
@@ -13,6 +14,8 @@ IPP_PATH = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
 # Add the path to the IPP files at the front to it will be checked first
 os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
 sys.path.append(DLL_PATH)
+
+setupDlls()
 
 import pythonnet
 if pythonnet.get_runtime_info() is None:
