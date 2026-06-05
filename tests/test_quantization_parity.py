@@ -66,8 +66,8 @@ def test_compression_quantization_parity(filepath):
         
         assert subject_compression == oracle_compression, f"Compression mode mismatch in {filepath}"
 
-        # 2. Compare Quantification Parameters
-        oracle_quant = oracle._QuantificationParametersObject
+        # 2. Compare Quantization Parameters
+        oracle_quant = oracle._QuantizationParametersObject
         subject_quant = test_subject._quantization_parameters
         
         if oracle_quant is None:

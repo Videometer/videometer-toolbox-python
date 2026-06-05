@@ -76,7 +76,7 @@ class ImageClass:
         self.ExtraDataString = dict()
         
         self._BandCompressionModeObject = None
-        self._QuantificationParametersObject = None
+        self._QuantizationParametersObject = None
 
         if config.get_backend() == "clr":
             self._init_clr(path, bandIndexesToUse, ifSkipReadingAllLayers, ifSkipReadingFreehandLayer)
@@ -106,7 +106,7 @@ class ImageClass:
         )
 
         self._BandCompressionModeObject = VMImageObject.BandCompressionMode
-        self._QuantificationParametersObject = VMImageObject.QuantificationParameters
+        self._QuantizationParametersObject = VMImageObject.QuantizationParameters
         self.MmPixel = VMImageObject.MmPixel
         self.History = VMImageObject.History
         self.Description = VMImageObject.Description
@@ -152,8 +152,8 @@ class ImageClass:
         self.ExtraDataInt = img.extra_data_int.copy()
         self.ExtraDataString = img.extra_data_string.copy()
         
-        # Quantification parameters in python backend are stored in the HipsImage object
-        # we don't have a direct equivalent of the CLR _QuantificationParametersObject 
+        # Quantization parameters in python backend are stored in the HipsImage object
+        # we don't have a direct equivalent of the CLR _QuantizationParametersObject 
         # but we can store them if needed. For now, let's just keep them in HipsImage.
         self._python_hips_image = img 
 
@@ -315,12 +315,13 @@ class ImageClass:
         imrgb = np.empty_like(srgbImage)
         if useMask:
             if self.ForegroundPixels is None:
-                raise AttributeError("ForegroundPixels attribute not set")
-
-            for i in range(3):
-                imrgb[:, :, i] = np.multiply(
-                    srgbImage[:, :, i], self.ForegroundPixels
-                )
+                imrgb = srgbImage
+                
+            else:
+                for i in range(3):
+                    imrgb[:, :, i] = np.multiply(
+                        srgbImage[:, :, i], self.ForegroundPixels
+                    )
         else:
             imrgb = srgbImage
         self.RGBPixels = imrgb
@@ -348,7 +349,7 @@ class ImageClass:
                 - 'Illuminations'
                 - 'StrobeTimes'
                 - 'StrobeTimesUniversal'
-                - A object overseeing the compression for each band (_QuantificationParametersObject)
+                - A object overseeing the compression for each band (_QuantizationParametersObject)
 
         """
 
@@ -364,14 +365,14 @@ class ImageClass:
         if config.get_backend() == "clr":
             import clr
             import VM.Image as VMIm
-            if self._QuantificationParametersObject is None:
+            if self._QuantizationParametersObject is None:
                 return
             tmp = clr.System.Array.CreateInstance(
-                VMIm.Compression.QuantificationParameters, len(bandIndexesToUse)
+                VMIm.Compression.QuantizationParameters, len(bandIndexesToUse)
             )
             for i, bandIndexToUse in enumerate(bandIndexesToUse):
-                tmp[i] = self._QuantificationParametersObject[bandIndexToUse]
-            self._QuantificationParametersObject = tmp
+                tmp[i] = self._QuantizationParametersObject[bandIndexToUse]
+            self._QuantizationParametersObject = tmp
         else:
             if hasattr(self, '_python_hips_image'):
                 self._python_hips_image.reduce_bands(list(bandIndexesToUse))
@@ -596,17 +597,17 @@ def _write_clr(image, path, compression, verbose):
                 compression
             ].CompressionParameters.CompressionMode
 
-        quantValue = compressionLUT[compression].QuantificationParameters
+        quantValue = compressionLUT[compression].QuantizationParameters
         bands = imagearr.shape[2]
-        quantificationParameters = clr.System.Array.CreateInstance(
-            VMIm.Compression.QuantificationParameters, bands
+        QuantizationParameters = clr.System.Array.CreateInstance(
+            VMIm.Compression.QuantizationParameters, bands
         )
         for i in range(bands):
-            quantificationParameters[i] = quantValue
+            QuantizationParameters[i] = quantValue
 
     else:
         bandCompressionMode = image._BandCompressionModeObject
-        quantificationParameters = image._QuantificationParametersObject
+        QuantizationParameters = image._QuantizationParametersObject
 
     Image_net = vm_utils_clr.npArray2VMImage(imagearr)
 
@@ -621,7 +622,7 @@ def _write_clr(image, path, compression, verbose):
         else:
             Image_net.BandCompressionMode = None
 
-        Image_net.QuantificationParameters = quantificationParameters
+        Image_net.QuantizationParameters = QuantizationParameters
         Image_net.Description = str(image.Description)
         Image_net.AddToHistory(str(image.History))
         Image_net.MmPixel = float(image.MmPixel)
