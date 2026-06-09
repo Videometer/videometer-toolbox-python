@@ -403,7 +403,8 @@ class BlobDataset:
     It manages its own thread-safe SQLite connection for DataLoader workers.
     """
     def __init__(self, db_path: str, samples: List[Tuple[int, int]], 
-                 class_map: Dict[int, str], transform=None):
+                 class_map: Dict[int, str], transform=None,
+                 use_rgb: bool = True, wavelengths: list = None):
         """
         Args:
             db_path (str): Path to the database file.
@@ -415,6 +416,8 @@ class BlobDataset:
         self.samples = samples
         self.class_map = class_map
         self.transform = transform
+        self.wavelengths = wavelengths
+        self.use_rgb = use_rgb
         
         # Connection is lazy-loaded per worker process
         self.conn = None
@@ -443,10 +446,18 @@ class BlobDataset:
             if row is None:
                 # Fallback or error handling if ID somehow missing
                 raise ValueError(f"Blob ID {db_id} not found during iteration.")
-                
-            blob_bytes = row[0]
-            
-            image = ImageClass.from_bytes(blob_bytes).to_sRGB(useMask=True)
+
+            img_obj = ImageClass.from_bytes(row[0])
+
+            if self.use_rgb:
+                image = img_obj.to_sRGB(useMask=True)
+            else:
+                raw_img = img_obj.PixelValues
+
+                if self.wavelengths:
+                    wavelengths_list = list(img_obj.WaveLengths)
+                    band_indices = [wavelengths_list.index(w) for w in self.wavelengths]
+                    image = raw_img[:, :, band_indices]
 
             if self.transform:
                 image = self.transform(image)
