@@ -315,13 +315,12 @@ class ImageClass:
         imrgb = np.empty_like(srgbImage)
         if useMask:
             if self.ForegroundPixels is None:
-                imrgb = srgbImage
+                raise AttributeError("ForegroundPixels attribute not set")
                 
-            else:
-                for i in range(3):
-                    imrgb[:, :, i] = np.multiply(
-                        srgbImage[:, :, i], self.ForegroundPixels
-                    )
+            for i in range(3):
+                imrgb[:, :, i] = np.multiply(
+                    srgbImage[:, :, i], self.ForegroundPixels
+                )
         else:
             imrgb = srgbImage
         self.RGBPixels = imrgb
