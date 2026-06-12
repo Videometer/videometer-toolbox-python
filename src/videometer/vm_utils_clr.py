@@ -28,6 +28,8 @@ clr.AddReference("VM.Image.NETBitmap")
 clr.AddReference("VM.Image.ViewTransforms")
 clr.AddReference("VM.Image")
 clr.AddReference("VM.Jobs")
+clr.AddReference("System.Drawing")
+
 
 import VM.Image as VMIm
 import VM.Image.IO as VMImIO
