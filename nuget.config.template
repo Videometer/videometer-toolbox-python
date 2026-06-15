@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  TEMPLATE - copy this file to "nuget.config" (same directory) and replace the placeholder
+  below with the real internal Videometer NuGet feed URL before running tools/fetch_dlls.py.
+
+      cp nuget.config.template nuget.config      # then edit the videometer source URL
+
+  The real nuget.config is gitignored on purpose: this repository is public and the internal
+  feed URL is not published. Only maintainers building a release need it; end users download the
+  prebuilt DLL bundle from the GitHub release and never touch this feed.
+-->
+<configuration>
+  <packageSources>
+    <clear />
+    <!-- Self-hosted Videometer NuGet v2 (OData) feed - replace with the real internal URL -->
+    <add key="videometer" value="https://REPLACE-WITH-INTERNAL-NUGET-FEED/" />
+    <!-- Public feed for managed third-party dependencies (e.g. SixLabors.ImageSharp) -->
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
+  </packageSources>
+</configuration>

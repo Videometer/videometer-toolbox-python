@@ -24,16 +24,22 @@ pip install videometer
 
 The package supports two backends for decoding images. The default `clr` backend is fully compatible with VideometerLab and the experimental `python` backend which offers cross platform support.
 
-The first time the `clr` backend is used the supporting DLLs will be downloaded, which requires an internet connection.
-**Note : First time the videometer.hips is imported it will fetch DLLs**
-
-When updating package, it is necessary to call
+The first time the `clr` backend is used, its supporting C# DLLs are downloaded once from the
+matching GitHub release and verified (SHA256) against [`dlls.lock.json`](src/videometer/dlls.lock.json),
+which is shipped in the package. This needs an internet connection on first use only. To see which
+DLL versions are installed:
 
 ```bash
-python -m videometer --clean-dll
+python -m videometer --dll-info
 ```
 
-in order to clear the DLL cache.
+**For maintainers:** the DLLs are managed via [`src/videometer/dlls.lock.json`](src/videometer/dlls.lock.json),
+which pins the VM.* NuGet package versions plus the committed `DLLs_vendored.zip` (native Intel
+IPP/MKL + .NET framework runtime libraries that are not on NuGet). To cut a release run
+`python tools/build_release.py`: it assembles the DLLs (`tools/fetch_dlls.py`), builds the
+downloadable bundle + records its hash in the lock (`tools/package_dll_bundle.py`), and builds the
+small wheel. Then upload the bundle to the GitHub release and publish the wheel (the script prints
+the exact commands). See [docs/design_plans/dll_management_nuget_pipeline.md](docs/design_plans/dll_management_nuget_pipeline.md).
 
 <br>
 

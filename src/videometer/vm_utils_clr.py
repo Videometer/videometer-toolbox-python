@@ -8,11 +8,17 @@ import numbers
 
 VMPATH = os.path.dirname(os.path.abspath(__file__))
 DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
-IPP_PATH = os.path.join(VMPATH, "DLLs", "IPP2019Update1", "intel64")
 
-# Add the path to the IPP files at the front to it will be checked first
-os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
+# Download the DLL bundle on first use (no-op once present). The wheel does not ship the DLLs.
+from videometer import dll_provision
+dll_provision.ensure_runtime_dlls()
+
+# The native (Intel IPP/MKL) and managed VM assemblies both live in DLL_PATH. Make them
+# discoverable to the OS loader and the CLR before the runtime is loaded.
+os.environ["PATH"] = DLL_PATH + os.pathsep + os.environ["PATH"]
 sys.path.append(DLL_PATH)
+if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
+    os.add_dll_directory(DLL_PATH)
 
 import pythonnet
 if pythonnet.get_runtime_info() is None:

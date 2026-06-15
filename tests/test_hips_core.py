@@ -3,20 +3,7 @@ import os
 import sys
 import numpy as np
 
-# Initialize DLL paths and pythonnet (copied from hips.py)
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-VMPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) # Adjust for tests/
-# Actually let's use the one from src/videometer/hips.py context
-VMPATH_SRC = os.path.join(VMPATH, "src", "videometer")
-IPP_PATH = os.path.join(VMPATH_SRC, "DLLs", "IPP2019Update1", "intel64")
-DLL_PATH = os.path.join(VMPATH_SRC, "DLLs", "VM")
-
-os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
-sys.path.append(DLL_PATH)
-
-import pythonnet
-if pythonnet.get_runtime_info() is None:
-    pythonnet.load("coreclr")
+# DLL paths and the pythonnet runtime are initialized once in tests/conftest.py.
 import clr
 
 clr.AddReference("VM.Image")

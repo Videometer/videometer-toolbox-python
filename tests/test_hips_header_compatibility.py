@@ -3,22 +3,8 @@ import os
 import sys
 import numpy as np
 import tempfile
-import pythonnet
-if pythonnet.get_runtime_info() is None:
-    pythonnet.load("coreclr")
+# DLL paths and the pythonnet runtime are initialized once in tests/conftest.py.
 import clr
-
-# Initialize DLL paths for legacy Oracle
-VMPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VMPATH_SRC = os.path.join(VMPATH, "src", "videometer")
-IPP_PATH = os.path.join(VMPATH_SRC, "DLLs", "IPP2019Update1", "intel64")
-DLL_PATH = os.path.join(VMPATH_SRC, "DLLs", "VM")
-
-os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
-if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
-    os.add_dll_directory(IPP_PATH)
-    os.add_dll_directory(DLL_PATH)
-sys.path.append(DLL_PATH)
 
 clr.AddReference("VM.Image")
 import VM.Image.IO as VMImIO

@@ -1,8 +1,5 @@
 import os
-import pythonnet
-pythonnet.load("coreclr")
-
-#os.environ["PATH"] = ""  # Remove everything temporary in system path
+# DLL paths and the pythonnet runtime are initialized once in tests/conftest.py.
 
 from videometer import hips
 from videometer import vm_utils as utils
