@@ -3,7 +3,17 @@ dist/
 docs/build/
 *videometer.egg-info/
 .vscode/
-src/videometer/DLLs*
+# Internal NuGet feed URL is private (public repo). Commit nuget.config.template instead;
+# maintainers copy it to nuget.config locally with the real URL.
+nuget.config
+# Assembled at build/dev time by tools/fetch_dlls.py from dlls.lock.json - never committed.
+src/videometer/DLLs/
+# Legacy / scratch DLL zips. The vendored native+framework libs live in
+# src/videometer/DLLs_vendored.zip, which IS committed (not matched by these rules).
+build/
+src/videometer/DLLs.zip
+src/videometer/DLLs_new.zip
+src/videometer/DLLs_old.zip
 src/videometer/test.py
 src/videometer/testVEnv/
 src/videometer/tests/TestImages/TestImagesWriting/*

@@ -1,8 +1,5 @@
 import os
-import pythonnet
-pythonnet.load("coreclr")
-
-#os.environ["PATH"] = ""  # Remove everything temporary in system path
+# DLL paths and the pythonnet runtime are initialized once in tests/conftest.py.
 
 from videometer import hips
 from videometer import vm_utils as utils
@@ -271,15 +268,15 @@ class Test02OnImagesRead(unittest.TestCase):
             compressionOfTestImage == "Uncompressed"
         ):  ## Uncompressed is not initialized correctly in the Compression Preset LUT
             self.assertIn(str(self.ImageClass._BandCompressionModeObject), "RAW")
-            self.assertIn(str(self.ImageClass._QuantificationParametersObject), "None")
+            self.assertIn(str(self.ImageClass._QuantizationParametersObject), "None")
         else:
             self.assertIn(
                 str(self.ImageClass._BandCompressionModeObject),
                 str(compParam.CompressionParameters),
             )
             for i in range(self.ImageClass.Bands):
-                a = self.ImageClass._QuantificationParametersObject[i]
-                b = compParam.QuantificationParameters
+                a = self.ImageClass._QuantizationParametersObject[i]
+                b = compParam.QuantizationParameters
 
                 self.assertEqual(a.Q, b.Q)
                 #self.assertAlmostEqual(a.Q_Max, b.Q_Max)
@@ -503,12 +500,12 @@ class Test03OnImagesVMfunctions(unittest.TestCase):
         ):  ## Uncompressed is not initialized correctly in the Compression Preset LUT
             self.assertIn(str(self.ImageClassReduced._BandCompressionModeObject), "RAW")
             self.assertIn(
-                str(self.ImageClassReduced._QuantificationParametersObject), "None"
+                str(self.ImageClassReduced._QuantizationParametersObject), "None"
             )
         else:
             for i in range(self.ImageClassReduced.Bands):
-                a = self.ImageClassReduced._QuantificationParametersObject[i]
-                b = self.ImageClass._QuantificationParametersObject[bandsIndexesToUse[i]]
+                a = self.ImageClassReduced._QuantizationParametersObject[i]
+                b = self.ImageClass._QuantizationParametersObject[bandsIndexesToUse[i]]
 
                 assert a.Q == b.Q
                 assert a.Q_Max == b.Q_Max
@@ -751,7 +748,7 @@ class TestHelperFunctions(unittest.TestCase):
         for c in compressions:
             self.assertTrue(c in lut)
             self.assertTrue("CompressionParameters" in dir(lut[c]))
-            self.assertTrue("QuantificationParameters" in dir(lut[c]))
+            self.assertTrue("QuantizationParameters" in dir(lut[c]))
 
 
 if __name__ == "__main__":

@@ -129,11 +129,17 @@ ILLUMINATION_TYPES = {
 }
 
 @dataclass
-class QuantificationParameters:
+class QuantizationParameters:
     """Parameters for de-quantizing image data."""
     Q: int = 8
     Q_Min: float = 0.0
     Q_Max: float = 1.0
+
+
+# Backwards-compatible alias: this class was named ``QuantificationParameters`` before the
+# VM.Image C# package renamed the corresponding type to ``QuantizationParameters``. Keep the
+# old name importable so existing callers do not break.
+QuantificationParameters = QuantizationParameters
 
 @dataclass
 class HipsImage:
@@ -171,8 +177,8 @@ class HipsImage:
     drawing_primitive_xml: str = ""
     id: str = ""
     
-    # Quantification
-    _quantization_parameters: Optional[List[QuantificationParameters]] = None
+    # Quantization
+    _quantization_parameters: Optional[List[QuantizationParameters]] = None
     _original_format: Optional[int] = None
 
     # Internal state
@@ -536,8 +542,8 @@ class HipsImage:
                     q_str = get_val(qp_node, 'Q')
                     q_min_str = get_val(qp_node, 'Q_Min')
                     q_max_str = get_val(qp_node, 'Q_Max')
-                    
-                    qp = QuantificationParameters(
+
+                    qp = QuantizationParameters(
                         Q=int(float(q_str)) if q_str else 8,
                         Q_Min=float(q_min_str) if q_min_str else 0.0,
                         Q_Max=float(q_max_str) if q_max_str else 1.0
@@ -552,12 +558,17 @@ class HipsImage:
                         self._original_format = fmt_map.get(orig_fmt_node.text)
             else:
                 params = []
-                for qp_node in root.findall('.//QuantificationParameters'):
+                # Accept the new C# element name (QuantizationParameters) as well as the
+                # pre-rename name (QuantificationParameters) so files written by either the
+                # new or the old VM.Image package still read.
+                qp_nodes = (root.findall('.//QuantizationParameters')
+                            or root.findall('.//QuantificationParameters'))
+                for qp_node in qp_nodes:
                     q_str = get_val(qp_node, 'Q')
                     q_min_str = get_val(qp_node, 'Q_Min')
                     q_max_str = get_val(qp_node, 'Q_Max')
-                    
-                    qp = QuantificationParameters(
+
+                    qp = QuantizationParameters(
                         Q=int(float(q_str)) if q_str else 8,
                         Q_Min=float(q_min_str) if q_min_str else 0.0,
                         Q_Max=float(q_max_str) if q_max_str else 1.0
@@ -717,7 +728,7 @@ class HipsImage:
                 q_min = preset["Q_Min"]
                 q_max = preset["Q_Max"]
                 self._quantization_parameters = [
-                    QuantificationParameters(Q=q_val, Q_Min=q_min, Q_Max=q_max) 
+                    QuantizationParameters(Q=q_val, Q_Min=q_min, Q_Max=q_max)
                     for _ in range(self.bands)
                 ]
                 self._original_format = HipsFormat.PFFLOAT
@@ -778,7 +789,7 @@ class HipsImage:
                         band_data = self._quantize_band(band_data, self._quantization_parameters[b])
                     f.write(encoder.encode_band(band_data))
 
-    def _quantize_band(self, band_data: np.ndarray, qp: QuantificationParameters) -> np.ndarray:
+    def _quantize_band(self, band_data: np.ndarray, qp: QuantizationParameters) -> np.ndarray:
         max_q = float(2**qp.Q - 1)
         range_val = qp.Q_Max - qp.Q_Min
         if range_val == 0:
@@ -803,15 +814,15 @@ class HipsImage:
             return ""
             
         xml = '<?xml version="1.0" encoding="utf-16"?>\n'
-        xml += '<ArrayOfQuantificationParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
-        
+        xml += '<ArrayOfQuantizationParameters xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n'
+
         for qp in self._quantization_parameters:
             # Format floats to remove .0 for integers, ensuring better culture compatibility
             q_min = f"{qp.Q_Min:g}"
             q_max = f"{qp.Q_Max:g}"
-            xml += f'  <QuantificationParameters Q_Min="{q_min}" Q_Max="{q_max}" Q="{qp.Q}" />\n'
-            
-        xml += '</ArrayOfQuantificationParameters>'
+            xml += f'  <QuantizationParameters Q_Min="{q_min}" Q_Max="{q_max}" Q="{qp.Q}" />\n'
+
+        xml += '</ArrayOfQuantizationParameters>'
         return xml
 
     def _write_x_params(self, f):

@@ -1,7 +1,4 @@
-import pythonnet
-# This MUST be called before "import clr"
-pythonnet.load("coreclr")
-
+# DLL paths and the pythonnet runtime are initialized once in tests/conftest.py.
 import videometer.hips as hips
 
 

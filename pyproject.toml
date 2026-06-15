@@ -9,7 +9,7 @@ requires = [
 
 [project]
 name = "videometer"
-version = "2.0.2"
+version = "2.0.3"
 authors = [ { "name"="Videometer A/S" } ]
 maintainers = [
     {"name"="Aske", "email"="asc@videometer.com" }]
@@ -50,6 +50,11 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 "videometer.tests.TestImages" = ["*.hips"]
+# The wheel stays small: it does NOT bundle the ~465 MB of DLLs. Instead it ships only
+# dlls.lock.json, which records the versioned, hash-verified DLL bundle to download from a
+# GitHub release on first use of the clr backend (see videometer/dll_provision.py). Maintainers
+# build that bundle reproducibly via tools/fetch_dlls.py + tools/package_dll_bundle.py.
+"videometer" = ["dlls.lock.json"]
 
 [project.optional-dependencies]
 test = [

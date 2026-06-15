@@ -5,22 +5,7 @@ import numpy as np
 import tempfile
 from videometer.hips_core import HipsImage, HipsFormat, COMPRESSION_PRESETS
 
-# Initialize DLL paths and pythonnet (copied from hips.py)
-os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
-VMPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VMPATH_SRC = os.path.join(VMPATH, "src", "videometer")
-IPP_PATH = os.path.join(VMPATH_SRC, "DLLs", "IPP2019Update1", "intel64")
-DLL_PATH = os.path.join(VMPATH_SRC, "DLLs", "VM")
-
-os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
-if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
-    os.add_dll_directory(IPP_PATH)
-    os.add_dll_directory(DLL_PATH)
-sys.path.append(DLL_PATH)
-
-import pythonnet
-if pythonnet.get_runtime_info() is None:
-    pythonnet.load("coreclr")
+# DLL paths and the pythonnet runtime are initialized once in tests/conftest.py.
 import clr
 
 clr.AddReference("VM.Image")

@@ -1,0 +1,143 @@
+{
+  "schema": 1,
+  "_comment": "Source of truth for the DLLs the clr backend loads. tools/fetch_dlls.py reads this to assemble src/videometer/DLLs/VM. To update VM DLLs: bump versions + sha256 here and re-run the script. See docs/design_plans/dll_management_nuget_pipeline.md.",
+  "framework": "net8.0-windows",
+  "vendored_zip": {
+    "file": "DLLs_vendored.zip",
+    "sha256": "286c316ae4eeb56e997443b890c91003b94ac9d57c51e731b704738d7f8ab1b0",
+    "note": "Committed in git. Contains the 55 native Intel libraries (ipp*/mkl*/libiomp5md) plus 4 .NET 8 desktop-runtime framework assemblies (PresentationCore, WindowsBase, System.IO.Packaging, System.Drawing.Common) that NuGet does not provide as loose redistributable DLLs. Rarely changes; rebuild only when the Intel runtime or target .NET runtime is updated."
+  },
+  "runtime_bundle": {
+    "_comment": "The complete assembled DLL set (vendored + NuGet), published as a GitHub release asset and downloaded on first use of the clr backend by videometer/dll_provision.py. NOT committed to git and NOT in the wheel. Built + hashed by tools/package_dll_bundle.py, which fills `sha256` and `url`. Must be uploaded to the release BEFORE the matching wheel is published to PyPI.",
+    "file": "videometer-dlls-2.0.3.zip",
+    "url": "https://github.com/Videometer/videometer-toolbox-python/releases/download/v2.0.3/videometer-dlls-2.0.3.zip",
+    "sha256": "bb424605c7215bd6ef96b83cb5b34dc03d03ab9332271fb8017f51cb9b20655e"
+  },
+  "nuget": {
+    "_comment": "Packages restored from the feed. All VM.* versions are pinned explicitly because their inter-package dependency constraints are minimums - relying on transitive resolution would pull older patch versions than those shipped. SixLabors.ImageSharp is pinned to match VM.Image's dependency.",
+    "packages": [
+      {
+        "id": "VM.Image",
+        "version": "5.0.6"
+      },
+      {
+        "id": "VM.Blobs",
+        "version": "6.1.2"
+      },
+      {
+        "id": "VM.Jobs",
+        "version": "3.1.1"
+      },
+      {
+        "id": "VM.Mathematics",
+        "version": "1.0.6"
+      },
+      {
+        "id": "VM.Serialization",
+        "version": "4.0.19"
+      },
+      {
+        "id": "VM.MKL",
+        "version": "2.1.1"
+      },
+      {
+        "id": "VM.IPP",
+        "version": "2.1.1"
+      },
+      {
+        "id": "VM.Image.ViewTransforms",
+        "version": "7.0.1"
+      },
+      {
+        "id": "VM.Image.NETBitmap",
+        "version": "3.0.1"
+      },
+      {
+        "id": "VM.Illumination",
+        "version": "2.1.24"
+      },
+      {
+        "id": "VM.Classification",
+        "version": "3.2.1"
+      },
+      {
+        "id": "VM.Progress",
+        "version": "2.2.2"
+      },
+      {
+        "id": "VM.GUI.Image.WinForms",
+        "version": "6.1.1"
+      },
+      {
+        "id": "VM.FreehandLayerIO",
+        "version": "3.1.1"
+      },
+      {
+        "id": "SixLabors.ImageSharp",
+        "version": "2.1.11"
+      }
+    ],
+    "managed_assemblies": [
+      {
+        "file": "VM.Image.dll",
+        "sha256": "09932efccb45e9719b1b793d99df0d5f0860c2e033c98584214af30160d8e672"
+      },
+      {
+        "file": "VM.Blobs.dll",
+        "sha256": "41ff04cbe72b9c21daa905b3adeb6abe02efed5c418fe121ebedc0390981f445"
+      },
+      {
+        "file": "VM.Jobs.dll",
+        "sha256": "0294a24e82e876c1446c343601c227ac5d3904c3e989d48609b00624dd3a865b"
+      },
+      {
+        "file": "VM.Mathematics.dll",
+        "sha256": "9c7efb53bf443345c3663a760934615ecbde560949d5baf4e3fe7bec6a497154"
+      },
+      {
+        "file": "VM.Serialization.dll",
+        "sha256": "cea558623e9a9c36b1194e39ee1b7756e2ea1bd0924bcf391f1362258031e0ce"
+      },
+      {
+        "file": "VM.MKL.dll",
+        "sha256": "44a0860914abba26fb267b492ffbaa577527fd9ac701fbb352fd21537ecefb38"
+      },
+      {
+        "file": "VM.IPP.dll",
+        "sha256": "45c03d605aa4891b6fc682a45291618b24fc9f90e2f5b65db942e2790861e29b"
+      },
+      {
+        "file": "VM.Image.ViewTransforms.dll",
+        "sha256": "921de0ef3ab5268927c8f8595decac207d144e3d966a9fbc973c40fb642875b6"
+      },
+      {
+        "file": "VM.Image.NETBitmap.dll",
+        "sha256": "0d7e0a41bba172a129fa43fbe82d489653cae29a1a78193d69086ebe451dc930"
+      },
+      {
+        "file": "VM.Illumination.dll",
+        "sha256": "f517316351cfefa4bb0d0db452b0127e97874b737910ee26456cd640f432998c"
+      },
+      {
+        "file": "VM.Classification.dll",
+        "sha256": "5beeaad1efa8bafa549a8229efea37259e986d7fc452be30b068b4544c4548f0"
+      },
+      {
+        "file": "VM.Progress.dll",
+        "sha256": "c47201685238cff48df2dcc04c455d6b5bc6113065257471f6e0db57d8ee83be"
+      },
+      {
+        "file": "VM.GUI.Image.WinForms.dll",
+        "sha256": "e6caf1a98837a12ecf31f1821d53badfd6793ad9f6a1b22fd4a170ba68f7e661"
+      },
+      {
+        "file": "VM.FreehandLayerIO.dll",
+        "sha256": "524856a10809c4417157c91a54ff440281d58824c0ae3b4f2a40950dd295ccc0"
+      },
+      {
+        "file": "SixLabors.ImageSharp.dll",
+        "sha256": "df2815a7802fd509ab941692ff5aac0fc4c8e0568abb0c79969dbc9e7e3a070d"
+      }
+    ]
+  }
+}

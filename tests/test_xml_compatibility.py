@@ -2,22 +2,8 @@ import pytest
 import os
 import sys
 import numpy as np
-import pythonnet
-if pythonnet.get_runtime_info() is None:
-    pythonnet.load("coreclr")
+# DLL paths and the pythonnet runtime are initialized once in tests/conftest.py.
 import clr
-
-# Initialize DLL paths for legacy Oracle
-VMPATH = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VMPATH_SRC = os.path.join(VMPATH, "src", "videometer")
-IPP_PATH = os.path.join(VMPATH_SRC, "DLLs", "IPP2019Update1", "intel64")
-DLL_PATH = os.path.join(VMPATH_SRC, "DLLs", "VM")
-
-os.environ["PATH"] = IPP_PATH + ";" + os.environ["PATH"]
-if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
-    os.add_dll_directory(IPP_PATH)
-    os.add_dll_directory(DLL_PATH)
-sys.path.append(DLL_PATH)
 
 clr.AddReference("VM.Image")
 import VM.Image.Compression as VMComp
@@ -25,7 +11,7 @@ import System
 from System.IO import StringReader
 from System.Xml.Serialization import XmlSerializer
 
-from videometer.hips_core import HipsImage, QuantificationParameters
+from videometer.hips_core import HipsImage, QuantizationParameters
 
 def test_xml_serialization_fidelity():
     """
@@ -41,8 +27,8 @@ def test_xml_serialization_fidelity():
     """
     img = HipsImage()
     img._quantization_parameters = [
-        QuantificationParameters(Q=12, Q_Min=0.0, Q_Max=120.0),
-        QuantificationParameters(Q=8, Q_Min=-1.0, Q_Max=1.0)
+        QuantizationParameters(Q=12, Q_Min=0.0, Q_Max=120.0),
+        QuantizationParameters(Q=8, Q_Min=-1.0, Q_Max=1.0)
     ]
     
     # 1. Generate XML string in Python
@@ -56,12 +42,12 @@ def test_xml_serialization_fidelity():
     
     # 2. Verify with real .NET XmlSerializer
     try:
-        # Resolve the C# Array Type for QuantificationParameters
-        qp_type = clr.GetClrType(VMComp.QuantificationParameters)
-        arr_type = System.Type.GetType("VM.Image.Compression.QuantificationParameters[], VM.Image")
+        # Resolve the C# Array Type for QuantizationParameters
+        qp_type = clr.GetClrType(VMComp.QuantizationParameters)
+        arr_type = System.Type.GetType("VM.Image.Compression.QuantizationParameters[], VM.Image")
         if arr_type is None:
             # Fallback for different assembly versions
-            arr_type = System.Array[VMComp.QuantificationParameters].GetType()
+            arr_type = System.Array[VMComp.QuantizationParameters].GetType()
             
         serializer = XmlSerializer(arr_type)
         reader = StringReader(xml_str)
