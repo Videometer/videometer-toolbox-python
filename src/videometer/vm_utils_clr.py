@@ -5,6 +5,7 @@ import ctypes
 from PIL import Image
 import tempfile
 import numbers
+from videometer.setup_helper import setupDlls
 
 VMPATH = os.path.dirname(os.path.abspath(__file__))
 DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
@@ -19,6 +20,8 @@ os.environ["PATH"] = DLL_PATH + os.pathsep + os.environ["PATH"]
 sys.path.append(DLL_PATH)
 if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
     os.add_dll_directory(DLL_PATH)
+
+setupDlls()
 
 import pythonnet
 if pythonnet.get_runtime_info() is None:
