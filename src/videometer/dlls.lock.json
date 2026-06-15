@@ -9,8 +9,8 @@
   },
   "runtime_bundle": {
     "_comment": "The complete assembled DLL set (vendored + NuGet), published as a GitHub release asset and downloaded on first use of the clr backend by videometer/dll_provision.py. NOT committed to git and NOT in the wheel. Built + hashed by tools/package_dll_bundle.py, which fills `sha256` and `url`. Must be uploaded to the release BEFORE the matching wheel is published to PyPI.",
-    "file": "videometer-dlls-2.0.2.zip",
-    "url": "https://github.com/Videometer/videometer-toolbox-python/releases/download/v2.0.2/videometer-dlls-2.0.2.zip",
+    "file": "videometer-dlls-2.0.3.zip",
+    "url": "https://github.com/Videometer/videometer-toolbox-python/releases/download/v2.0.3/videometer-dlls-2.0.3.zip",
     "sha256": "bb424605c7215bd6ef96b83cb5b34dc03d03ab9332271fb8017f51cb9b20655e"
   },
   "nuget": {
