@@ -1,5 +1,6 @@
 import os
 import sys
+import warnings
 import matplotlib.pyplot as plt
 import numpy as np
 import tempfile
@@ -186,18 +187,33 @@ class ImageClass:
             getImageLayer(VMImageObject, "DeadPixels")
         )
 
-        # Attempt to load foreground pixels from blob image
-        try:
-            from VM.Blobs import BlobImage
-            blobImage = BlobImage.CreateFromXmlAndCreateMaskImage(VMImageObject.History, VMImageObject.ImageWidth, VMImageObject.ImageHeight)
-            VMIm.ForegroundPixelsLayerHelperMethods.SetForegroundPixelsImageLayer(VMImageObject, blobImage.MaskImage)
-        except:
-            pass
-
-        # ForegroundPixels
+        # ForegroundPixels (natively-stored layer, present on ordinary non-blob images)
         self.ForegroundPixels = vm_utils_clr.imageLayer2npArray(
             getImageLayer(VMImageObject, "ForegroundPixels")
         )
+
+        # Blob images do not store a ForegroundPixels layer; their mask lives in the HIPS
+        # history as BlobImage XML. Reconstruct it and use it directly as the foreground mask
+        # (mirrors VM.Blobs.VMImageExtension.BlobMaskAsForegroundMask: a blob mask overwrites
+        # the foreground). We convert blobImage.MaskImage straight to numpy rather than routing
+        # it through SetForegroundPixelsImageLayer, whose internal bitwise-And throws for blobs
+        # whose multispectral image has no allocated band/foreground data to And against.
+        from VM.Blobs import BlobImage
+        if BlobImage.IsBlobImageContained(VMImageObject.History):
+            blobImage = None
+            try:
+                blobImage = BlobImage.CreateFromXmlAndCreateMaskImage(
+                    VMImageObject.History, VMImageObject.ImageWidth, VMImageObject.ImageHeight
+                )
+                self.ForegroundPixels = vm_utils_clr.maskImage2npArray(blobImage.MaskImage)
+            except Exception as e:
+                warnings.warn(
+                    "Failed to load blob foreground mask; ForegroundPixels left unset. "
+                    f"Reason: {e}"
+                )
+            finally:
+                if blobImage is not None:
+                    blobImage.Clear()
 
         # SaturatedPixels
         self.SaturatedPixels = vm_utils_clr.imageLayer2npArray(

@@ -5,7 +5,6 @@ import ctypes
 from PIL import Image
 import tempfile
 import numbers
-from videometer.setup_helper import setupDlls
 
 VMPATH = os.path.dirname(os.path.abspath(__file__))
 DLL_PATH = os.path.join(VMPATH, "DLLs", "VM")
@@ -20,8 +19,6 @@ os.environ["PATH"] = DLL_PATH + os.pathsep + os.environ["PATH"]
 sys.path.append(DLL_PATH)
 if sys.platform == "win32" and hasattr(os, "add_dll_directory"):
     os.add_dll_directory(DLL_PATH)
-
-setupDlls()
 
 import pythonnet
 if pythonnet.get_runtime_info() is None:
@@ -69,6 +66,21 @@ def imageLayer2npArray(imageLayer):
         npArray = npArray / npMax
 
     vmImg.Free()
+    return npArray.astype(np.int32)
+
+
+def maskImage2npArray(maskImage):
+    """Converts a mask VMImage (e.g. a blob's reconstructed foreground mask) directly to a
+    binary numpy array. Same shape/dtype contract as imageLayer2npArray, but takes a VMImage
+    rather than an image layer. The caller owns the VMImage lifetime (this does not Free it)."""
+    if maskImage is None:
+        return None
+
+    npArray = vmImage2npArray(maskImage)[:, :, 0]
+    npMax = np.max(npArray)
+    if npMax != 0.0:
+        npArray = npArray / npMax
+
     return npArray.astype(np.int32)
 
 

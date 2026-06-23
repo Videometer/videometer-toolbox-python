@@ -127,6 +127,29 @@ class BlobDatabase:
             cursor = conn.cursor()
             cursor.execute(query, (class_name, map_type))
             return [row[0] for row in cursor.fetchall()]
+        
+
+    def get_blob_id_for_db_id(self, db_id: int) -> str:
+        """
+        Returns the UUID blob_id for a given internal integer id (blobs_t.id).
+
+        Args:
+            db_id (int): The internal integer id stored in `samples`.
+
+        Returns:
+            str: The UUID blob_id.
+
+        Raises:
+            ValueError: If the db_id does not exist.
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT blob_id FROM blobs_t WHERE id = ?", (db_id,))
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Blob with internal id {db_id} not found.")
+        return row[0]
+    
 
     def get_data_frame(self, ids: Optional[List[str]] = None) -> pd.DataFrame:
         """
@@ -429,6 +452,32 @@ class BlobDataset:
 
     def __len__(self):
         return len(self.samples)
+
+    def get_blob_id(self, idx: int) -> str:
+        """
+        Returns the UUID blob_id for the sample at position `idx`.
+
+        The dataset stores only the internal integer id (blobs_t.id); this
+        looks up the corresponding UUID (blobs_t.blob_id), e.g. for use with
+        BlobDatabase.get_blob().
+
+        Args:
+            idx (int): Index into the dataset (same index used by __getitem__).
+
+        Returns:
+            str: The UUID blob_id.
+
+        Raises:
+            ValueError: If the internal id is not found.
+        """
+        db_id, _ = self.samples[idx]
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT blob_id FROM blobs_t WHERE id = ?", (db_id,))
+        row = cursor.fetchone()
+        if row is None:
+            raise ValueError(f"Blob with internal id {db_id} not found.")
+        return row[0]
 
     def __getitem__(self, idx):
         db_id, label_idx = self.samples[idx]
