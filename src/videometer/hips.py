@@ -61,6 +61,7 @@ class ImageClass:
         self.WaveLengths = None
         self.StrobeTimes = None
         self.StrobeTimesUniversal = None
+        self.OpticalFilters = None
         self.MmPixel = 0.0
         self.History = ""
         self.Description = ""
@@ -105,6 +106,10 @@ class ImageClass:
         self.StrobeTimesUniversal = vm_utils_clr.asNumpyArray(
             VMImageObject.StrobeTimesUniversal
         )
+        self.OpticalFilters = [
+            self._opticalFilter2dict(VMImageObject.GetOpticalFilterForBand(band))
+            for band in range(self.Bands)
+        ]
 
         self._BandCompressionModeObject = VMImageObject.BandCompressionMode
         self._QuantizationParametersObject = VMImageObject.QuantizationParameters
@@ -166,6 +171,17 @@ class ImageClass:
 
         if len(bandIndexesToUse) != 0:
             self.reduceBands(bandIndexesToUse)
+
+    @staticmethod
+    def _opticalFilter2dict(opticalFilter):
+        """VM.Illumination.OpticalFilter -> dict, or None for NoFilter (plain reflectance band)."""
+        if opticalFilter is None or opticalFilter.IsNoFilterType:
+            return None
+        return {
+            "type": str(opticalFilter.Type),
+            "pass_band_min": int(opticalFilter.PassBandMin),
+            "pass_band_max": int(opticalFilter.PassBandMax),
+        }
 
     def _ReadAllImageLayers_clr(self, VMImageObject, ifSkipReadingFreehandLayer):
         from videometer import vm_utils_clr
@@ -376,6 +392,8 @@ class ImageClass:
         self.StrobeTimes = self.StrobeTimes[bandIndexesToUse]
         self.Illumination = self.Illumination[bandIndexesToUse]
         self.StrobeTimesUniversal = self.StrobeTimesUniversal[bandIndexesToUse]
+        if self.OpticalFilters is not None:
+            self.OpticalFilters = [self.OpticalFilters[i] for i in bandIndexesToUse]
 
         if config.get_backend() == "clr":
             import clr

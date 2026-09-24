@@ -1,3 +1,6 @@
+Version 2.1.0
+- ImageClass.OpticalFilters: the optical filter of every band (None for plain reflectance bands), read from the HIPS header
+
 Version 2.0.4 
 - Fixed a issue, where some blob foregroundpixel where not found correct.
 - Added some test for testing to get blobid from a BlobDatabse. 
